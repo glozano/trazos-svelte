@@ -1,0 +1,31 @@
+@use 'sass:color';
+
+@use '@material/theme/color-palette';
+
+// Svelte Colors! (Dark Theme)
+@use '@material/theme/index' as theme with (
+  $primary: #33ff00,
+  $secondary: color.scale(#676778, $whiteness: -10%),
+  $surface: color.adjust(color-palette.$grey-900, $blue: +4),
+  $background: #000,
+  $error: color-palette.$red-700
+);
+
+@use "@material/top-app-bar" as topbar;
+@use "@material/top-app-bar/mdc-top-app-bar";
+
+.mdc-top-app-bar {
+  @include topbar.fill-color(theme.$surface);
+  @include topbar.ink-color(theme.$on-surface);
+  @include topbar.icon-ink-color(theme.$on-surface);
+}
+
+html,
+body {
+  background-color: #000;
+  color: theme.$on-surface;
+}
+.mdc-icon-button svg{
+  width: 28px !important;
+  height: 28px !important;
+}
