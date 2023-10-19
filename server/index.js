@@ -2,7 +2,9 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { handler } from '../build/handler.js'
-import { MongoClient }  from 'mongodb'
+import console from 'console'
+
+// import { MongoClient }  from 'mongodb'
 
 const port = 3000
 
@@ -91,14 +93,23 @@ io.on('connection', function(socket) {
     });
 
     socket.on('clientConnectionEvent', async function(data) {
-        clients[client_id] = data.id;
-        console.log("Se conecto el usuario " + clients[client_id]);
+        clients.push({
+            "socketId" : client_id,
+            "trazosId"  : data.id,
+            "board" : room_id,
+            "lines" : 0,
+            "connected" : true,
+            "time" : new Date().toTimeString().split(' ')[0]
+        })
+        // clients[client_id] = data.id;
+        // console.log("Se conecto el usuario " + data.id);
 
-        const boardLines = await db.collection('lines').find({"board":room_id}).toArray();
-        // console.log(boardLines);
-        if(boardLines.length){
-            socket.emit("previousLines",boardLines);
-        }
+        // Enviar las lineas pasadas cuando el usuario se conecta
+
+        // const boardLines = await db.collection('lines').find({"board":room_id}).toArray();
+        // if(boardLines.length){
+        //     socket.emit("previousLines",boardLines);
+        // }
     });
 
     // Mensaje del chat
@@ -153,41 +164,51 @@ io.on('connection', function(socket) {
 
     // Movimiento de los trazos
     socket.on('externalMouseEvent',async function(data) {
-        db.collection("lines").insertOne({
-            board:room_id,
-            id: data.gesture_id,
-            data:data,
-            layer:data.layer,
-            user:client_id,
-            timestamp:new Date()
-        });
+        
+        // Guardar lineas
+        
+        // db.collection("lines").insertOne({
+        //     board:room_id,
+        //     id: data.gesture_id,
+        //     data:data,
+        //     layer:data.layer,
+        //     user:client_id,
+        //     timestamp:new Date()
+        // });
         socket.broadcast.to(room_id).emit('externalMouseEvent',data);
+        
+        clients.find((el) => el.socketId == socket.client.conn.id).lines++ ;
 
-        console.log( await db.collection("lines").count({board:room_id}));
-        while(await db.collection("lines").count({board:room_id}) > 500){
-            var oldestLine = await db.collection("lines").findOne({ board : room_id },{sort:{ timestamp : 1 }});
-            await db.collection("lines").deleteMany({
-                board:room_id,
-                id: oldestLine.id
-            });
-            var del = {
-                'layer': oldestLine.layer,
-                'user_id': oldestLine.data.id,
-                'gesture_id': oldestLine.id
-            }
-            console.log(del);
-            socket.broadcast.to(room_id).emit('deleteEvent', del);
-            console.log("Borro "+oldestLine.id);
-        }
+        // Borrar lineas viejas cuando pasa los 500
+
+        // // console.log( await db.collection("lines").count({board:room_id}));
+        // while(await db.collection("lines").count({board:room_id}) > 500){
+        //     var oldestLine = await db.collection("lines").findOne({ board : room_id },{sort:{ timestamp : 1 }});
+        //     await db.collection("lines").deleteMany({
+        //         board:room_id,
+        //         id: oldestLine.id
+        //     });
+        //     var del = {
+        //         'layer': oldestLine.layer,
+        //         'user_id': oldestLine.data.id,
+        //         'gesture_id': oldestLine.id
+        //     }
+        //     // console.log(del); SACAR EL BROADCAST para enviar tambien a quien dibuja
+        //     socket.broadcast.to(room_id).emit('deleteEvent', del);
+        //     // console.log("Borro "+oldestLine.id);
+        // }
     });
 
     socket.on('deleteEvent', function(data) {
         socket.broadcast.to(room_id).emit('deleteEvent', data);
-        db.collection("lines").deleteMany({
-            board:room_id,
-            user:client_id,
-            layer:data.layer
-        });
+        
+        // Borrar lineas 
+
+        // db.collection("lines").deleteMany({
+        //     board:room_id,
+        //     user:client_id,
+        //     layer:data.layer
+        // });
     });
 
     // Desconexion de un cliente
@@ -207,8 +228,10 @@ io.on('connection', function(socket) {
         }
         connections--;
         
-        if(clients.length > 0) console.log("Se desconecto el usuario " + clients[client_id]);
+        // if(clients.length > 0) console.log("Se desconecto el usuario " + clients[client_id]);
+
         console.log('Usuarios conectados: ', connections);
+        
         socket.broadcast.emit('user_disconnected', {
             connections: connections
         });
@@ -218,6 +241,7 @@ io.on('connection', function(socket) {
         // });
        
         // Delete all gestures from this client
+
         // var id = clients[client_id];
         // for (var i = 0; i < 4; i++) {
         //     var del = {
@@ -230,31 +254,73 @@ io.on('connection', function(socket) {
 
 
         boards[room_id].connections--;
-        if(boards[room_id].connections < 1){
-            db.collection("lines").deleteMany({"board":room_id});
-        }
-        delete clients[client_id];
+
+        // Si no quedan mas usuarios borrar todas las lineas 
+
+        // if(boards[room_id].connections < 1){
+        //     db.collection("lines").deleteMany({"board":room_id});
+        // }
+        
+        
+        // delete clients[client_id];
+        console.log("se fue");
+        // console.dir(socket.id);
+        clients.find((el) => el.socketId == socket.client.conn.id).connected =false ;
     });
 
 
 });
 
 
+function writeLogTable(){
+    var structDatas = [];
+        // { handler: 'http', endpoint: 'http://localhost:3000/path', method: 'ALL' },
+        // { handler: 'event', endpoint: 'http://localhost:3000/event', method: 'POST' },
+        // { handler: 'GCS', endpoint: 'http://localhost:3000/GCS', method: 'POST' }
+    
+    for(var i=0; i < clients.length; i++){
+        structDatas.push({
+            "Board": clients[i].board,
+            "Socket ID" : clients[i].socketId,
+            "Trazos ID": clients[i].trazosId,
+            "Gestures": clients[i].lines,
+            "Connected": clients[i].connected,
+            "Last connection": clients[i].time,
+        });
+    }
+
+    // clients.forEach((client)=>{
+    //     structDatas.push({ handler: 'http', endpoint: 'http://localhost:3000/path', method: 'ALL' });
+    // })
+
+    console.table(structDatas,["Board","Socket ID","Trazos ID","Gestures","Connected","Last connection"]);
+    // console.dir(clients);
+}
+
 server.listen(port,async () =>{
     console.log('Running on *:3000');
 
+    // Conexión a Mongo
+
     // initDB();
-    const client = new MongoClient(url);
-    
-    await client.connect();
-    console.log("Connected successfully to Mongo");
-    db =  await client.db(dbName);
-    console.log('Mongo running on: '+url);
-    console.log(db);
+    // const client = new MongoClient(url);
+    // await client.connect();
+    // console.log("Connected successfully to Mongo");
+    // db =  await client.db(dbName);
+    // console.log('Mongo running on: '+url);
+    // console.log(db);
+
+
+    setInterval(function () {
+        console.clear();
+        writeLogTable();
+    }, 1000);
+
 
     // Borramos lineas viejas
-    setInterval(function () {
-        var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
-        db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
-    }, 1 * 60 * 60 * 1000);
+
+    // setInterval(function () {
+    //     var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
+    //     db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
+    // }, 1 * 60 * 60 * 1000);
 });

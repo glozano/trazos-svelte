@@ -99,7 +99,7 @@ class StrokeGesture {
     this.t0 = 0;
     this.t1 = 0;
     this.lastUpdate = 0;
-    this.gestureId = generateRandomString(10);
+    // this.gestureId = generateRandomString(10);
 
     this.looping = false;
     this.fadeOutFact = 1;

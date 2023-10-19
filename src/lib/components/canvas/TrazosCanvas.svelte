@@ -4,8 +4,8 @@
     Lineas totales: {gesturesPerFrame} <br/>
     -------- <br/>
     Lineas mias: {myGesturesPerFrame} <br/>
-    -------- <br/>
-    Lineas mias por capa <br/>
+    <!-- -------- <br/>
+    Lineas mias por capa <br/> -->
     <!-- -------- <br/>
     Layer 1: {$layers[0].length} <br/>
     Layer 2: {$layers[1].length} <br/>
@@ -14,8 +14,8 @@
     -------- <br/>
     Lineas del resto: {otherGesturesPerFrame} <br/>
     -------- <br/>
-    Loaded gestures: {prevLines.length} <br/>
-    -------- <br/>
+    <!-- Loaded gestures: {prevLines.length} <br/> -->
+    <!-- -------- <br/> -->
     FPS: {Math.round(frameRate)} <br/>
     -------- <br/>
 </div>   
@@ -54,27 +54,13 @@
         $socket.on('deleteEvent', deleteHandler);
         // document.addEventListener('touchstart', userTouch);
         
-        $socket.on('previousLines', async function(lines){
-            if(!loadingLines){
-                prevLines = lines
-                loadingLines = true;
-            }
-            
-            // document.querySelector("#joining-modal").style.display = "flex";
-            // $("#joining-modal .msg").html("Cargando "+lines.length+" trazos");
-            // $("#joining-modal .start").on("click",function(){
-            //     document.querySelector("#joining-modal").style.display = "none";
-            // })
-            // console.log("cargando lineas");
-            // setTimeout(
-            //     function(){
-                    
-                    // $("#joining-modal .msg").html(lines.length+" trazos cargados.");
-                    // $("#joining-modal .trazos-spinner").fadeOut(null,null,function(){$("#joining-modal .start").fadeIn()});
-                // },
-                // 1500
-            // );
-        });
+        // Cargar lineas previas
+        // $socket.on('previousLines', async function(lines){
+        //     if(!loadingLines){
+        //         prevLines = lines
+        //         loadingLines = true;
+        //     }
+        // });
     });
 
 	const sketch = (p5) => {
@@ -92,13 +78,14 @@
 			p5.background(0);
             otherGesturesCount = 0;
             myGestureCount = 0;
-            if(prevLines.length > 0){
-                // console.log("mando1");
-                prevLines.splice(0,4).forEach((line)=>{
-                    // console.log("mando2");
-                    externalMouseEvent(line.data);
-                });
-            }
+            // Cargar lineas previas
+            // if(prevLines.length > 0){
+            //     // console.log("mando1");
+            //     prevLines.splice(0,4).forEach((line)=>{
+            //         // console.log("mando2");
+            //         externalMouseEvent(line.data);
+            //     });
+            // }
             var t = p5.millis();
             // Iterar sobre las capas disponibles, empezando desde la ultima
             for (var i = $layers.length - 1; 0 <= i; i--) {
@@ -132,7 +119,7 @@
             otherGesturesPerFrame = otherGesturesCount;
             myGesturesPerFrame = myGestureCount;
             gesturesPerFrame = otherGesturesPerFrame+myGesturesPerFrame;
-            frameRate = p5.frameRate();
+            if(p5.frameCount % 30 == 0) frameRate = p5.frameRate();
         }
         p5.mousePressed = (event)=>gestureStart(p5, event);
         p5.mouseDragged = (event)=>gestureDrag(p5, event);
@@ -213,35 +200,45 @@
             otherGesture.setEndTime(t1);
         }
     }
-
+    
     function deleteHandler(data) {
-        console.log("No funciona esto");
         var layer = data.layer;
-        var userId = data.user_id;
-        var gestureId = data.gesture_id;
-        
-        // console.log("BORROROROROROR");
-        if(userId == $id){
-            console.log("apsdpasdp");
-            for (var j = $layers[layer].length - 1; j >= 0; j--) {
-                console.log("11");
-                if($layers[layer][j].gestureId == gestureId){
-                    console.log("22");
-                    $layers[layer][j].looping = false;
-                    $layers[layer][j].fadeOutFact = DELETE_FACTOR;
-                }
-            }
-            
-        }else{
-            // gestures = otherGestures[layer].get(id);
+        var id = data.id;
+        if(otherGestures[layer]) var gestures = otherGestures[layer].get(id);
+        for (var idx in gestures) {
+            var g = gestures[idx];
+            // if (g.layer == layer) {
+            g.looping = false;
+            g.fadeOutFact = DELETE_FACTOR;
+            // }
         }
-        
-        // for (var idx in gestures) {
-        //     var g = gestures[idx];
-        //     g.looping = false;
-        //     g.fadeOutFact = DELETE_FACTOR;
-        // }
     }
+    
+    //  Proyecto de delete por linea
+
+    // function deleteHandler(data) {
+    //     var layer = data.layer;
+    //     var userId = data.user_id;
+    //     var gestureId = data.gesture_id;
+        
+    //     if(userId == $id){
+    //         for (var j = $layers[layer].length - 1; j >= 0; j--) {
+    //             if($layers[layer][j].gestureId == gestureId){
+    //                 $layers[layer][j].looping = false;
+    //                 $layers[layer][j].fadeOutFact = DELETE_FACTOR;
+    //             }
+    //         }
+            
+    //     }else{
+    //         // gestures = otherGestures[layer].get(id);
+    //     }
+        
+    //     // for (var idx in gestures) {
+    //     //     var g = gestures[idx];
+    //     //     g.looping = false;
+    //     //     g.fadeOutFact = DELETE_FACTOR;
+    //     // }
+    // }
     
     function gestureStart(p5,event){
         if ($openModals) return;
@@ -269,7 +266,7 @@
             'stroke_weight':$canvasParams.ribbonWidth,
             'layer': $canvasParams.layer,
             'fixed':$canvasParams.fixed,
-            'gesture_id': $currentGesture.gestureId,
+            // 'gesture_id': $currentGesture.gestureId,
             'id': $id
         }
 
@@ -293,7 +290,7 @@
                 'color': $canvasParams.color,
                 'stroke_weight':$canvasParams.ribbonWidth,
                 'layer': $canvasParams.layer,
-                'gesture_id': $currentGesture.gestureId,
+                // 'gesture_id': $currentGesture.gestureId,
                 'id': $id
             }
             $socket.emit("externalMouseEvent", movement);
@@ -333,7 +330,7 @@
                 'stroke_weight':$canvasParams.ribbonWidth,
                 'layer': $canvasParams.layer,
                 'looping': $canvasParams.looping,
-                'gesture_id': $currentGesture.gestureId,
+                // 'gesture_id': $currentGesture.gestureId,
                 'id': $id
             }
             
