@@ -37,7 +37,7 @@
         </nav>
     </header>
         <section data-anchor="introducción" id="intro">
-            <img class="logo" src={logo} alt="Logo de trazos" />
+            <a href="/"><img class="logo" src={logo} alt="Logo de trazos" /></a>
             <h2>es una plataforma web para dibujo colectivo</h2>
             <div class="texto">
                 <p>
@@ -58,13 +58,13 @@
                 
                 <p class="link">
                     <a href="https://drive.google.com/file/d/12xNf9T9TSBwR0Qhf21FUOYEVujw98QiI/view?usp=sharing" target="_blank">
-                      <img src={logoAndiamo} alt="Andiamo Live" title="" style="">
+                      <img class="andiamo" src={logoAndiamo} alt="Andiamo Live" title="" style="">
                       <br>
                       +info de este proyecto y tutoriales en Andiamo.live
                     </a>
                   </p>
             </div>
-            <a href="/board" class="boton dibujar mobile">¡A dibujar!</a><br />
+            <a on:click={() => goToBoard()} class="boton dibujar mobile">¡A dibujar!</a><br />
         </section>
         <section data-anchor="quienes-somos" id="quienes-somos">
             <h2>QUIÉNES SOMOS</h2>
@@ -236,7 +236,7 @@ section#intro .logo{
 section#intro .link{
     margin-top: 32px;
 }
-section#intro a img {
+section#intro img.andiamo {
     height: 30px;
     width: auto;
 }

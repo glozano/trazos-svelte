@@ -21,7 +21,7 @@
 </div>   
 <script>
     import  P5  from 'p5-svelte';
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import Ribbon from '$lib/andiamo/ribbon';
     import {StrokeGesture} from '$lib/andiamo/stroke';
     import {p, canvas, currentRibbon,currentGesture,prevGesture, canvasParams, layers, reset, openModals} from '$lib/stores/boardStore';
@@ -72,6 +72,9 @@
         //         loadingLines = true;
         //     }
         // });
+    });
+    onDestroy(()=>{
+        $p.remove();
     });
 
 	const sketch = (p5) => {
