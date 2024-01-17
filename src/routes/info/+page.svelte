@@ -37,7 +37,7 @@
         </nav>
     </header>
         <section data-anchor="introducción" id="intro">
-            <!-- <img class="logo" src={logo} alt="Logo de trazos" /> -->
+            <img class="logo" src={logo} alt="Logo de trazos" />
             <h2>es una plataforma web para dibujo colectivo</h2>
             <div class="texto">
                 <p>
