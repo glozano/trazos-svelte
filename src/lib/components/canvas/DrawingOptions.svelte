@@ -283,6 +283,7 @@
             position: fixed;
             width: auto;
             top: 80px;
+            left: 0;
             justify-content: start;
         }
         .floating-right{

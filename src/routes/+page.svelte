@@ -5,6 +5,7 @@
     import Header from '$lib/components/Header.svelte';
 
     import logo from '$lib/images/logo.png'
+    import BackgroundSketch from '$lib/components/BackgroundSketch.svelte';
 
     function generateRandomString(length) {
         const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -19,22 +20,25 @@
        goto(`/board/${generateRandomString(6)}`, true );
     }
 </script>
-
-<Header></Header>
-<FloatingDrawingOptions></FloatingDrawingOptions>
-<div class="home-wrapper">
-    <div class="home">
-        <img class="home-logo" src={logo} alt="Trazos club"/>
-        <Button on:click={() => goToBoard()} variant="raised">
-            <Label>¡A dibujar!</Label>
-        </Button>
-        <Button on:click={() => goto('/info')} variant="outlined" class="test">
-            <Label>¿Qué es Trazos Club?</Label>
-        </Button>
-    </div>    
+<div class="home">
+    <Header></Header>
+    <BackgroundSketch></BackgroundSketch>
+    <FloatingDrawingOptions></FloatingDrawingOptions>
+    <div class="home-wrapper">
+        <div class="home">
+            <img class="home-logo" src={logo} alt="Trazos club"/>
+            <Button on:click={() => goToBoard()} variant="raised">
+                <Label>¡A dibujar!</Label>
+            </Button>
+            <Button on:click={() => goto('/info')} variant="outlined" class="test">
+                <Label>¿Qué es Trazos Club?</Label>
+            </Button>
+        </div>    
+        
+    </div>
+    
     
 </div>
-
 
 
 <style>
@@ -67,6 +71,10 @@
         margin-bottom: 16px;
         padding: 24px;
         width: 300px;
+    }
+    :global(.home canvas){
+        position: absolute;
+        left: 0;
     }
     
 </style>
