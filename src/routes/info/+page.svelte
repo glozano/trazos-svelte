@@ -475,9 +475,9 @@ footer .flecha {
     .boton.mobile{
         display: block !important;
         width: 250px;
-        padding: 25px;
-        font-size: 2em;
-        margin: 70px auto;
+        padding: 16px;
+        /* font-size: 2em; */
+        margin: 32px auto;
     }
     section#intro {
         background: none;
@@ -486,38 +486,52 @@ footer .flecha {
     }
     section#intro .logo {
         /* width: 25%; */
+        width: 300px;
     }
     section#intro h2 {
-        font-size:2em;
+        font-size:1.4em;
     }
     section#intro .texto {
-        font-size: 1.8em;
+        font-size: 1.1em;
         width: 80%;
     }
-    section#intro a img {
-        width: 10%;
+    section#quienes-somos  p {
+        font-size: 2em;
     }
-    section#quienes-somos .colRight p {
-        font-size: 1.8em;
+
+    section#quienes-somos .columns{
+        flex-direction: column;
+        width: 80%;
+    }
+    section#quienes-somos .colLeft,section#quienes-somos .colRight {
+        text-align: center;
+    }
+    section#quienes-somos .spacer{
+        display: none;
+    }
+    section#quienes-somos .colRight{
+        width: 100%;
+        margin: 0;
     }
     section#quienes-somos .colRight ul li {
-        font-size: 1.5em;
+        font-size: 1.2em;
     }
     section#quienes-somos h2 {
-        font-size: 1.8em;
-    }
-    section#quienes-somos .colRight {
-        width: 55%;
+        font-size: 1.4em;
     }
     section#quienes-somos #btnContactar{
-        font-size: 1.5em;
+        font-size: 1.2em;
+    }
+    section#donde-venimos{
+        flex-direction: column;
+        padding: 0 10%;
     }
     section#donde-venimos .columna {
         float: none;
         width: 100%;
         text-align: center;
         padding: 0;
-        font-size: 1.8em;
+        font-size: 1.1em;
     }
     section#donde-venimos h2{
         margin: 0;
@@ -525,6 +539,11 @@ footer .flecha {
     section#donde-venimos .fp-tableCell{
         padding: 30px 60px;
     }
+    section#donde-venimos ul{
+        list-style: none;
+        padding-left: 0;
+    }
+    
     section#donde-venimos img {
         width: 28%;
         margin-bottom: 0;
