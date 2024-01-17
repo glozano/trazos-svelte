@@ -1,23 +1,23 @@
 
 <P5 {sketch} />
 <div class="counter">
-    Lineas totales: {gesturesPerFrame} <br/>
+    <!-- Lineas totales: {gesturesPerFrame} <br/>
     -------- <br/>
     Lineas mias: {myGesturesPerFrame} <br/>
-    <!-- -------- <br/>
-    Lineas mias por capa <br/> -->
+    -------- <br/> -->
+    <!-- Lineas mias por capa <br/> -->
     <!-- -------- <br/>
     Layer 1: {$layers[0].length} <br/>
     Layer 2: {$layers[1].length} <br/>
     Layer 3: {$layers[2].length} <br/>
     Layer 4: {$layers[3].length} <br/> -->
-    -------- <br/>
-    Lineas del resto: {otherGesturesPerFrame} <br/>
-    -------- <br/>
+    <!-- -------- <br/> -->
+    <!-- Lineas del resto: {otherGesturesPerFrame} <br/> -->
+    <!-- -------- <br/> -->
     <!-- Loaded gestures: {prevLines.length} <br/> -->
     <!-- -------- <br/> -->
-    FPS: {Math.round(frameRate)} <br/>
-    -------- <br/>
+    <!-- FPS: {Math.round(frameRate)} <br/>
+    -------- <br/> -->
 </div>   
 <script>
     import  P5  from 'p5-svelte';
@@ -52,6 +52,17 @@
         clientConnect();
         $socket.on('externalMouseEvent', externalMouseEvent);
         $socket.on('deleteEvent', deleteHandler);
+        $socket.on("connect", () => {
+            // setTimeout(() => {
+            //     if ($socket.io.engine) {
+            //     // close the low-level connection and trigger a reconnection
+            //     $socket.io.engine.close();
+            //     }
+            // }, 10000);
+        });
+        $socket.on('disconnect', function() {
+            
+        })
         // document.addEventListener('touchstart', userTouch);
         
         // Cargar lineas previas
@@ -132,7 +143,6 @@
 
     // Parece que el dissapearing y el alpha se comparten con el board Y la velocidad tambien???
     function externalMouseEvent(data){
-        console.log("external mouse");
         /*
         MOUSE PRESS
         */

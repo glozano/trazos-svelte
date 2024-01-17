@@ -14,6 +14,10 @@
 @use "@material/top-app-bar" as topbar;
 @use "@material/top-app-bar/mdc-top-app-bar";
 
+@use '@material/button/button-outlined-theme' with (
+  $outline-color: theme.$primary
+);
+ 
 .mdc-top-app-bar {
   @include topbar.fill-color(theme.$surface);
   @include topbar.ink-color(theme.$on-surface);
@@ -24,6 +28,7 @@ html,
 body {
   background-color: #000;
   color: theme.$on-surface;
+  margin: 0;
 }
 .mdc-icon-button svg{
   width: 28px !important;

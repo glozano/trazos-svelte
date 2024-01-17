@@ -11,16 +11,17 @@
     var shareModal=true;
 </script>
 
+<div class="canvas-wrapper">
+    <Header></Header>
 
-<Header></Header>
+    <TrazosCanvas></TrazosCanvas>
+    
+    <FloatingDrawingOptions></FloatingDrawingOptions>
+</div>
 
-<TrazosCanvas></TrazosCanvas>
-
-<FloatingDrawingOptions></FloatingDrawingOptions>
 
 <style>
-    :global(body){
-        margin: 0;
-        overscroll-behavior: none;
+    .canvas-wrapper{
+        position: fixed;
     }
 </style>

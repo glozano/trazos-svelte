@@ -3,8 +3,10 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import { handler } from '../build/handler.js'
 import console from 'console'
+import uap from 'ua-parser-js'
 
-// import { MongoClient }  from 'mongodb'
+
+import { MongoClient }  from 'mongodb'
 
 const port = 3000
 
@@ -20,7 +22,14 @@ const port = 3000
 const app = express();
 app.use(handler)
 const server = createServer(app);
-const io = new Server(server)
+const io = new Server(server,{
+    connectionStateRecovery: {
+      // the backup duration of the sessions and the packets
+      maxDisconnectionDuration: 2 * 60 * 1000,
+      // whether to skip middlewares upon successful recovery
+      skipMiddlewares: true,
+    }
+  })
 // var fs = require("fs");
 // var uuid = require('node-uuid');
 // var mkdirp = require('mkdirp');
@@ -28,7 +37,7 @@ const io = new Server(server)
 // hashids = new Hashids("this is my salt",0, "0123456789abcdef");
 var connections = 0;
 var chatConnections = [];
-
+var log =[];
 
 
 // MongoDB vars
@@ -51,13 +60,13 @@ var clients = [];
 var boardSeed = 0;
 var boards = [];
 
-// function initDB(){
-//     // Use connect method to connect to the server
-//     MongoClient.connect(url,(err, client)=>{
-//         console.log("Connected successfully to Mongo");
-//         db = client.db(dbName);
-//     });
-// }
+function initDB(){
+    // Use connect method to connect to the server
+    MongoClient.connect(url,(err, client)=>{
+        console.log("Connected successfully to Mongo");
+        db = client.db(dbName);
+    });
+}
 
 // Conexión
 io.on('connection', function(socket) {
@@ -65,7 +74,8 @@ io.on('connection', function(socket) {
     
     // Recibo desde el cliente el room_id
     var room_id = socket.handshake.query.room_id;
-    var client_id = socket.client.conn.id;
+    // var client_id = socket.client.conn.id;
+    var client_id = socket.id;
     socket.join(room_id);
 
     if (!chatConnections[room_id]) chatConnections[room_id] = {qty:0,usernames:[]};
@@ -80,7 +90,20 @@ io.on('connection', function(socket) {
             "connections":1
         };
     }
-    console.log('Usuarios conectados: ', connections);
+    if (socket.recovered) {
+        // console.log("recuperado pa");
+        log.push(
+            "Usuario "+socket.id+" recuperado en board "+room_id+". Reconexión a las "+new Date().toTimeString().split(' ')[0]
+        );
+        if(clients.find((el) => el.socketId == socket.id)){
+            clients.find((el) => el.socketId == socket.id).connected = true;
+        }
+    }else{
+        log.push(
+            "Usuario "+socket.id+" conectado en board "+room_id+" a las "+new Date().toTimeString().split(' ')[0]
+        );
+    }
+    // console.log('Usuarios conectados: ', connections);
 
     // Usuario conectado
     socket.broadcast.emit('connections',{
@@ -98,6 +121,7 @@ io.on('connection', function(socket) {
             "trazosId"  : data.id,
             "board" : room_id,
             "lines" : 0,
+            "ua" : uap(socket.request.headers['user-agent']).os,
             "connected" : true,
             "time" : new Date().toTimeString().split(' ')[0]
         })
@@ -106,10 +130,10 @@ io.on('connection', function(socket) {
 
         // Enviar las lineas pasadas cuando el usuario se conecta
 
-        // const boardLines = await db.collection('lines').find({"board":room_id}).toArray();
-        // if(boardLines.length){
-        //     socket.emit("previousLines",boardLines);
-        // }
+        const boardLines = await db.collection('lines').find({"board":room_id}).toArray();
+        if(boardLines.length){
+            socket.emit("previousLines",boardLines);
+        }
     });
 
     // Mensaje del chat
@@ -167,17 +191,18 @@ io.on('connection', function(socket) {
         
         // Guardar lineas
         
-        // db.collection("lines").insertOne({
-        //     board:room_id,
-        //     id: data.gesture_id,
-        //     data:data,
-        //     layer:data.layer,
-        //     user:client_id,
-        //     timestamp:new Date()
-        // });
+        db.collection("lines").insertOne({
+            board:room_id,
+            id: data.gesture_id,
+            data:data,
+            layer:data.layer,
+            user:client_id,
+            timestamp:new Date()
+        });
         socket.broadcast.to(room_id).emit('externalMouseEvent',data);
-        
-        clients.find((el) => el.socketId == socket.client.conn.id).lines++ ;
+        if(clients.find((el) => el.socketId == socket.id)){
+            clients.find((el) => el.socketId == socket.id).lines++;
+        }
 
         // Borrar lineas viejas cuando pasa los 500
 
@@ -204,11 +229,11 @@ io.on('connection', function(socket) {
         
         // Borrar lineas 
 
-        // db.collection("lines").deleteMany({
-        //     board:room_id,
-        //     user:client_id,
-        //     layer:data.layer
-        // });
+        db.collection("lines").deleteMany({
+            board:room_id,
+            user:client_id,
+            layer:data.layer
+        });
     });
 
     // Desconexion de un cliente
@@ -257,15 +282,19 @@ io.on('connection', function(socket) {
 
         // Si no quedan mas usuarios borrar todas las lineas 
 
-        // if(boards[room_id].connections < 1){
-        //     db.collection("lines").deleteMany({"board":room_id});
-        // }
+        if(boards[room_id].connections < 1){
+            db.collection("lines").deleteMany({"board":room_id});
+        }
         
         
         // delete clients[client_id];
-        console.log("se fue");
+        log.push(
+            "Usuario "+socket.id+" desconectado en board "+room_id+" a las "+new Date().toTimeString().split(' ')[0]
+        );
         // console.dir(socket.id);
-        clients.find((el) => el.socketId == socket.client.conn.id).connected =false ;
+        if(clients.find((el) => el.socketId == socket.id)){
+            clients.find((el) => el.socketId == socket.id).connected = false ;
+        }
     });
 
 
@@ -281,6 +310,7 @@ function writeLogTable(){
     for(var i=0; i < clients.length; i++){
         structDatas.push({
             "Board": clients[i].board,
+            "User Agent": clients[i].ua,
             "Socket ID" : clients[i].socketId,
             "Trazos ID": clients[i].trazosId,
             "Gestures": clients[i].lines,
@@ -292,9 +322,9 @@ function writeLogTable(){
     // clients.forEach((client)=>{
     //     structDatas.push({ handler: 'http', endpoint: 'http://localhost:3000/path', method: 'ALL' });
     // })
-
-    console.table(structDatas,["Board","Socket ID","Trazos ID","Gestures","Connected","Last connection"]);
-    // console.dir(clients);
+    console.dir(log);
+    console.table(structDatas,["Board","User Agent","Socket ID","Trazos ID","Gestures","Connected","Last connection"]);
+    
 }
 
 server.listen(port,async () =>{
@@ -302,13 +332,13 @@ server.listen(port,async () =>{
 
     // Conexión a Mongo
 
-    // initDB();
-    // const client = new MongoClient(url);
-    // await client.connect();
-    // console.log("Connected successfully to Mongo");
-    // db =  await client.db(dbName);
-    // console.log('Mongo running on: '+url);
-    // console.log(db);
+    initDB();
+    const client = new MongoClient(url);
+    await client.connect();
+    console.log("Connected successfully to Mongo");
+    db =  await client.db(dbName);
+    console.log('Mongo running on: '+url);
+    console.log(db);
 
 
     setInterval(function () {
@@ -319,8 +349,8 @@ server.listen(port,async () =>{
 
     // Borramos lineas viejas
 
-    // setInterval(function () {
-    //     var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
-    //     db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
-    // }, 1 * 60 * 60 * 1000);
+    setInterval(function () {
+        var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
+        db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
+    }, 1 * 60 * 60 * 1000);
 });

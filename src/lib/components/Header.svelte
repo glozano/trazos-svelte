@@ -8,6 +8,7 @@
     import ChatIcon from '$lib/components/icons/chatIcon.svelte';
     import ShareIcon from '$lib/components/icons/ShareIcon.svelte';
     import GifIcon from '$lib/components/icons/gifIcon.svelte';
+    import { goto } from '$app/navigation';
     import ShareDialog from './dialogs/ShareDialog.svelte';
     import ChatDialog from './dialogs/ChatDialog.svelte';
     import GifDialog from './dialogs/GifDialog.svelte';
@@ -28,7 +29,7 @@
 <TopAppBar bind:this={topAppBar} variant="fixed" class="mdc-theme--surface">
     <Row>
       <Section>
-        <IconButton class="material-icons">menu</IconButton>
+        <!-- <IconButton class="material-icons">menu</IconButton> -->
         <a class="logo-link" href="/"><img src={logo} alt="Trazos club" height="30"/></a>
       </Section>
       <Section align="end" toolbar>
