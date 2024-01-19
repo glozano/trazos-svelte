@@ -14,6 +14,7 @@
     import GifDialog from './dialogs/GifDialog.svelte';
     import { gifStore } from '$lib/stores/gifStore';
         
+    export let active = true;
     let topAppBar;
     let chatMessages = 0;
     let chatDialog = false;
@@ -54,10 +55,11 @@
     </Row>
   </TopAppBar>
 
+  {#if active}
   <ShareDialog bind:showDialog={shareDialog}></ShareDialog>
   <GifDialog bind:showDialog={gifDialog}></GifDialog>
   <ChatDialog bind:showDialog={chatDialog} bind:unreadNum={chatMessages}></ChatDialog>
-   
+   {/if}
 <style>
     .logo-link{
         height: 30px;

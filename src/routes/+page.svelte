@@ -21,7 +21,7 @@
     }
 </script>
 <div class="home">
-    <Header></Header>
+    <Header active={false}></Header>
     <BackgroundSketch></BackgroundSketch>
     <FloatingDrawingOptions></FloatingDrawingOptions>
     <div class="home-wrapper">

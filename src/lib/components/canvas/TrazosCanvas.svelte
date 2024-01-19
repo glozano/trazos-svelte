@@ -66,15 +66,17 @@
         // document.addEventListener('touchstart', userTouch);
         
         // Cargar lineas previas
-        // $socket.on('previousLines', async function(lines){
-        //     if(!loadingLines){
-        //         prevLines = lines
-        //         loadingLines = true;
-        //     }
-        // });
+        $socket.on('previousLines', async function(lines){
+            if(!loadingLines){
+                prevLines = lines
+                loadingLines = true;
+            }
+        });
     });
     onDestroy(()=>{
         $p.remove();
+        console.log("dsiconect");
+        $socket.disconnect();
     });
 
 	const sketch = (p5) => {
@@ -93,13 +95,13 @@
             otherGesturesCount = 0;
             myGestureCount = 0;
             // Cargar lineas previas
-            // if(prevLines.length > 0){
-            //     // console.log("mando1");
-            //     prevLines.splice(0,4).forEach((line)=>{
-            //         // console.log("mando2");
-            //         externalMouseEvent(line.data);
-            //     });
-            // }
+            if(prevLines.length > 0){
+                // console.log("mando1");
+                prevLines.splice(0,4).forEach((line)=>{
+                    // console.log("mando2");
+                    externalMouseEvent(line.data);
+                });
+            }
             var t = p5.millis();
             // Iterar sobre las capas disponibles, empezando desde la ultima
             for (var i = $layers.length - 1; 0 <= i; i--) {

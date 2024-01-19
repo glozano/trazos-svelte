@@ -3,6 +3,7 @@
     import { fade } from 'svelte/transition';
     import {openModals} from '$lib/stores/boardStore';
 
+    export let active = true;
     let optionsVisible = false;
     let wrapper;
 
