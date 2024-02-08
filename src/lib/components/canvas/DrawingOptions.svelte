@@ -115,12 +115,24 @@
         </FloatingOption>
         <FloatingOption>
             <div slot="optionSelector">
-                <div class="range-slider">
+                <div class="range-slider vertical">
                     <input 
                         bind:value={speedInputValue} 
                         on:input={() => $canvasParams.loopMultiplier = adjustSpeed(speedInputValue)}
                         class="input-range" 
                         orient="vertical" 
+                        type="range" 
+                        step="0.1" 
+                        min="{minSpeed}" 
+                        max="{maxSpeed}"
+                        >
+                </div>
+                <div class="range-slider horizontal">
+                    <input 
+                        bind:value={speedInputValue} 
+                        on:input={() => $canvasParams.loopMultiplier = adjustSpeed(speedInputValue)}
+                        class="input-range" 
+                        orient="horizontal" 
                         type="range" 
                         step="0.1" 
                         min="{minSpeed}" 
@@ -136,8 +148,11 @@
         </FloatingOption>
         <FloatingOption>
             <div slot="optionSelector">
-                <div class="range-slider">
+                <div class="range-slider vertical">
                     <input bind:value={$canvasParams.ribbonWidth} class="input-range" orient="vertical" type="range" step="0.1" min="{minSize}" max="{maxSize}">
+                </div>
+                <div class="range-slider horizontal">
+                    <input bind:value={$canvasParams.ribbonWidth} class="input-range" orient="horizontal" type="range" step="0.1" min="{minSize}" max="{maxSize}">
                 </div>
             </div>
             <div slot="selectedOption">
@@ -210,11 +225,17 @@
         padding: 20px 0;
         border: 0.5px solid rgba(128, 128, 128, 0.634);
     }
+    .range-slider.vertical{
+        display: flex;
+    }
+    .range-slider.horizontal{
+        display: none;
+    }
     .input-range {
         height: 250px;
         width: 100%;
         accent-color: #00ff00;
-        writing-mode: bt-lr; /* IE */
+        /* writing-mode: bt-lr;  IE */
         -webkit-appearance: slider-vertical; /* WebKit */
     }
 
@@ -311,6 +332,12 @@
             appearance:auto;
             height: 15px;
             margin: 0 16px;
+        }
+        .range-slider.horizontal{
+            display: flex;
+        }
+        .range-slider.vertical{
+            display: none;
         }
         .range-slider{
             position: absolute;

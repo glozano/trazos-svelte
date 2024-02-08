@@ -4,6 +4,10 @@ import { Server } from 'socket.io'
 import { handler } from '../build/handler.js'
 import console from 'console'
 import uap from 'ua-parser-js'
+import textBody from 'body'
+import { v4 as uuidv4 } from 'uuid';
+import { mkdirp } from 'mkdirp'
+import { writeFile } from 'node:fs';
 
 
 import { MongoClient }  from 'mongodb'
@@ -20,6 +24,20 @@ const port = 3000
 
 // var textBody = require("body");
 const app = express();
+
+app.post('/files', function(req, res) {
+    const extract = function (err, data) {
+        if (!data) return
+        res.setHeader('Content-Type', 'application/json');
+        const filePath = saveImage(data);
+        res.send(JSON.stringify({ filename: filePath}));
+        console.log('Saved file: ' + filePath);
+    }
+
+    textBody(req, extract);
+});
+
+
 app.use(handler)
 const server = createServer(app);
 const io = new Server(server,{
@@ -31,8 +49,7 @@ const io = new Server(server,{
     }
   })
 // var fs = require("fs");
-// var uuid = require('node-uuid');
-// var mkdirp = require('mkdirp');
+
 // var Hashids = require("hashids"),
 // hashids = new Hashids("this is my salt",0, "0123456789abcdef");
 var connections = 0;
@@ -301,6 +318,25 @@ io.on('connection', function(socket) {
 });
 
 
+function saveImage(rawData) {
+    var regex = /^data:.+\/(.+);base64,(.*)$/;
+
+    var matches = rawData.match(regex);
+    var ext = matches[1];
+    var data = matches[2];
+    var buffer = new Buffer(data, 'base64');
+    const publicDir = 'public';
+    const usrImgDir = 'user-img';
+    const pubUserImgDir = publicDir + '/' + usrImgDir;
+    var filename = usrImgDir + '/' + uuidv4() + '.' + ext;
+    mkdirp.sync(pubUserImgDir);
+    writeFile(publicDir + '/' + filename, buffer, function(err) {
+        if (err) throw err;
+    });
+    return filename;
+}
+
+
 function writeLogTable(){
     var structDatas = [];
         // { handler: 'http', endpoint: 'http://localhost:3000/path', method: 'ALL' },
@@ -341,14 +377,16 @@ server.listen(port,async () =>{
     console.log(db);
 
 
-    setInterval(function () {
-        console.clear();
-        writeLogTable();
-    }, 1000);
+    // setInterval(function () {
+    //     console.clear();
+    //     writeLogTable();
+    // }, 1000);
 
 
     // Borramos lineas viejas
-
+    var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
+    db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
+    
     setInterval(function () {
         var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
         db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});

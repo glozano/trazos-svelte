@@ -12,10 +12,10 @@
     // "Generando Gif"
 
     let loading = true;
-    let uploadSuccess = true;
+    let uploadSuccess = false;
     
-    // const urlSplit = $page.url.split('/');
-    // const hostAndPort = urlSplit[0] + '//' + urlSplit[2] + '/';
+    const urlSplit = $page.url.href.split('/');
+    const hostAndPort = urlSplit[0] + '//' + urlSplit[2] + '/';
 
     let currentGif = null;
     let currentGiphyId = null;
@@ -50,6 +50,105 @@
         });
     }
 
+    // var uploadToServer = function(cb){
+    //     $.ajax({
+    //         type: "POST",
+    //         url: hostAndPort + 'files',
+    //         data: gif.currentGif,
+    //         success: function(data) {
+    //             console.log("Success uploading to server");
+    //             cb(data)
+    //         },
+    //         error: function(obj){
+    //             console.log("Error uploading to server");
+    //             cb(obj);
+    //         },
+    //         dataType: 'json'
+    //     });
+    // }
+    const uploadToServer = async () => {
+        try {
+            const response = await fetch(hostAndPort + 'files', {
+                method: 'POST',
+                body: currentGif,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            const data = await response.json();
+            console.log("Success uploading to server");
+            return data;
+        } catch (error) {
+            console.error("Error uploading to server", error);
+            throw error;
+        }
+    };
+
+    const uploadToGiphy = async () => {
+        try {
+            loading = true;
+            gifStatus = "Preparando GIF";
+            const serverData = await uploadToServer();
+            gifStatus = "Subiendo GIF a GIPHY";
+            // console.log("Subiendo a GIPHY");
+            const formData = new FormData();
+            formData.append('api_key', 'phMDT8Jy1QVT2ftqfB8XKbRoaG0RDT7K');
+            formData.append('username', 'trazosclub');
+            formData.append('source_image_url', hostAndPort + serverData.filename);
+            formData.append('tags', 'trazos,trazosclub,processing,collaborative,drawing,draw');
+
+            const response = await fetch('https://upload.giphy.com/v1/gifs', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            giphyResponse = await response.json();
+            loading = false;
+            currentGiphyId = giphyResponse.data.id;
+            currentGif = "https://media.giphy.com/media/" + currentGiphyId + "/giphy.gif";
+            uploadSuccess=true;
+            // console.log("Success uploading to giphy");
+        } catch (error) {
+            loading=false;
+            gifStatus = "Algo salió mal subiendo el GIF, proba de nuevo!";
+            setTimeout(() => {
+                gifStatus = "";
+            }, 3000);
+            console.error("There was an error when uploading to Giphy", error);
+        }
+    };
+
+    var copyLink = function () {
+        if(currentGiphyId){
+            gifStatus = "¡Copiado!";
+            navigator.clipboard.writeText("https://media.giphy.com/media/"+currentGiphyId+"/giphy.gif");
+            setTimeout(function(){
+                gifStatus = "";
+            },1500)
+        }else{
+            gifStatus = "Algo salió mal subiendo el GIF, proba de nuevo!";
+            setTimeout(function(){
+                gifStatus = "";
+            },3000)
+        }
+
+    };
+
+    // var download = function () {
+    //     // $("#download").attr("href",);
+    // };
+
+
+
     $gifStore.triggerCreateGif = _createGif;
 </script>
 
@@ -74,7 +173,7 @@
                     </div>
                 <img src={currentGif}  alt="Generated Gif" class="gen-gif"/>
                 <div class="gif-actions">
-                    {#if uploadSuccess}
+                    {#if !uploadSuccess}
                         <div class="vertical-btn">
                             <IconButton class="material-icons link" on:click={()=>{_createGif()}}>
                                 refresh
@@ -82,23 +181,23 @@
                             <span>Generar de nuevo</span>
                         </div>
                         <div class="vertical-btn">
-                            <IconButton class="material-icons download" on:click={()=>{}}>
+                            <IconButton class="material-icons download" on:click={()=>{uploadToGiphy()}}>
                                 upload
                             </IconButton>
                             <span>Subir a GIPHY y compartir</span>
                         </div>            
                     {:else}
                         <div class="vertical-btn">
-                            <IconButton class="material-icons link" on:click={()=>{}}>
+                            <IconButton class="material-icons link" on:click={()=>{copyLink()}}>
                                 link
                             </IconButton>
                             <span>Copiar link</span>
                         </div>
                         <div class="vertical-btn">
-                            <IconButton class="material-icons download" on:click={()=>{}}>
+                            <IconButton class="material-icons download" target="_blank" href={"https://media.giphy.com/media/"+currentGiphyId+"/giphy.mp4"}>
                                 download
                             </IconButton>
-                            <span>Descargar</span>
+                            <span>Descargar o compartir de Giphy</span>
                         </div>
                         
                     {/if}
@@ -138,7 +237,7 @@
         /* max-width: 180px; */
         text-align: center;
     }
-    :global(.vertical-btn button){
+    :global(.vertical-btn button, .vertical-btn a){
         margin:auto;
         background: #00FF00;
         border-radius: 100%;
