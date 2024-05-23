@@ -57,7 +57,7 @@
                 </p>
                 
                 <p class="link">
-                    <a href="https://drive.google.com/file/d/12xNf9T9TSBwR0Qhf21FUOYEVujw98QiI/view?usp=sharing" target="_blank">
+                    <a href="https://drive.google.com/file/d/1nYQm1CYAhnJ_ql-sX5v6D9UocH3p_GVR/view?usp=drive_link" target="_blank">
                       <img class="andiamo" src={logoAndiamo} alt="Andiamo Live" title="" style="">
                       <br>
                       +info de este proyecto y tutoriales en Andiamo.live

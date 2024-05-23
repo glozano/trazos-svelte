@@ -12,6 +12,8 @@ import { writeFile } from 'node:fs';
 
 import { MongoClient }  from 'mongodb'
 
+
+const mongoActive = true;
 const port = 3000
 
 // SvelteKit should handle everything else using Express middleware
@@ -146,11 +148,13 @@ io.on('connection', function(socket) {
         // console.log("Se conecto el usuario " + data.id);
 
         // Enviar las lineas pasadas cuando el usuario se conecta
-
-        const boardLines = await db.collection('lines').find({"board":room_id}).toArray();
-        if(boardLines.length){
-            socket.emit("previousLines",boardLines);
+        if(mongoActive){
+            const boardLines = await db.collection('lines').find({"board":room_id}).toArray();
+            if(boardLines.length){
+                socket.emit("previousLines",boardLines);
+            }
         }
+        
     });
 
     // Mensaje del chat
@@ -207,15 +211,16 @@ io.on('connection', function(socket) {
     socket.on('externalMouseEvent',async function(data) {
         
         // Guardar lineas
-        
-        db.collection("lines").insertOne({
-            board:room_id,
-            id: data.gesture_id,
-            data:data,
-            layer:data.layer,
-            user:client_id,
-            timestamp:new Date()
-        });
+        if(mongoActive){
+            db.collection("lines").insertOne({
+                board:room_id,
+                id: data.gesture_id,
+                data:data,
+                layer:data.layer,
+                user:client_id,
+                timestamp:new Date()
+            });
+        }
         socket.broadcast.to(room_id).emit('externalMouseEvent',data);
         if(clients.find((el) => el.socketId == socket.id)){
             clients.find((el) => el.socketId == socket.id).lines++;
@@ -245,12 +250,13 @@ io.on('connection', function(socket) {
         socket.broadcast.to(room_id).emit('deleteEvent', data);
         
         // Borrar lineas 
-
-        db.collection("lines").deleteMany({
-            board:room_id,
-            user:client_id,
-            layer:data.layer
-        });
+        if(mongoActive){
+            db.collection("lines").deleteMany({
+                board:room_id,
+                user:client_id,
+                layer:data.layer
+            });
+        }
     });
 
     // Desconexion de un cliente
@@ -300,7 +306,10 @@ io.on('connection', function(socket) {
         // Si no quedan mas usuarios borrar todas las lineas 
 
         if(boards[room_id].connections < 1){
-            db.collection("lines").deleteMany({"board":room_id});
+            if(mongoActive){
+                db.collection("lines").deleteMany({"board":room_id});
+            }
+            
         }
         
         
@@ -368,27 +377,29 @@ server.listen(port,async () =>{
 
     // Conexión a Mongo
 
-    initDB();
-    const client = new MongoClient(url);
-    await client.connect();
-    console.log("Connected successfully to Mongo");
-    db =  await client.db(dbName);
-    console.log('Mongo running on: '+url);
-    console.log(db);
+    if(mongoActive) {
+        initDB();
+        const client = new MongoClient(url);
+        await client.connect();
+        console.log("Connected successfully to Mongo");
+        db =  await client.db(dbName);
+        console.log('Mongo running on: '+url);
+        console.log(db);
+    
+        // Borramos lineas viejas
+        var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
+        db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
+        
+        setInterval(function () {
+            var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
+            db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
+        }, 1 * 60 * 60 * 1000);
+    
+    }
 
 
     // setInterval(function () {
     //     console.clear();
     //     writeLogTable();
-    // }, 1000);
-
-
-    // Borramos lineas viejas
-    var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
-    db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
-    
-    setInterval(function () {
-        var THREE_HOURS = 3 * 60 * 60 * 1000; /* ms */
-        db.collection("lines").deleteMany({"timestamp" : {$lt : new Date((new Date())-THREE_HOURS)}});
-    }, 1 * 60 * 60 * 1000);
+    // }, 1000);    
 });
