@@ -57,10 +57,10 @@
                 </p>
                 
                 <p class="link">
-                    <a href="https://drive.google.com/file/d/1nYQm1CYAhnJ_ql-sX5v6D9UocH3p_GVR/view?usp=drive_link" target="_blank">
-                      <img class="andiamo" src={logoAndiamo} alt="Andiamo Live" title="" style="">
+                    <a href="https://docs.google.com/document/d/1cWVBmtiji0_KpnJ54Fbaa1DNiLk31FXdLGg2NmxHIUo/edit?tab=t.0" target="_blank">
+                      <!-- <img class="andiamo" src={logoAndiamo} alt="Andiamo Live" title="" style=""> -->
                       <br>
-                      +info de este proyecto y tutoriales en Andiamo.live
+                      +info de este proyecto y tutoriales
                     </a>
                   </p>
             </div>
