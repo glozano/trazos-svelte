@@ -59,7 +59,6 @@
                 <p class="link">
                     <a href="https://docs.google.com/document/d/1cWVBmtiji0_KpnJ54Fbaa1DNiLk31FXdLGg2NmxHIUo/edit?tab=t.0" target="_blank">
                       <!-- <img class="andiamo" src={logoAndiamo} alt="Andiamo Live" title="" style=""> -->
-                      <br>
                       +info de este proyecto y tutoriales
                     </a>
                   </p>
@@ -236,13 +235,25 @@ section#intro .logo{
 section#intro .link{
     margin-top: 32px;
 }
+section#intro .link a{
+    background: #00ff00;
+    color: black;
+    padding: 16px 24px;
+    text-align: center;
+    font-weight: bold;
+    border-radius: 33px;
+    display: block;
+    width: fit-content;
+    margin-top: 60px;
+    text-decoration: none;
+    justify-self: anchor-center;
+}
+
 section#intro img.andiamo {
     height: 30px;
     width: auto;
 }
-section#intro a {
-    color: #00ff00;
-}
+
 section#intro h2 {
     font-size: 26px;
     color: #00ff00;
