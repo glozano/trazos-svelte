@@ -51,9 +51,9 @@
                     lenguajes expresivos por parte de la comunidad.
                 </p>
                 <p>
-                Trazos Club es parte de una propuesta de creación de tecnologías de software libre, proyectos artísticos
-                    y educativos colaborativos: el proyecto Andiamo que responde a la necesidad de generar una solución tecnológica 
-                    mediante sistemas de colaboración en tiempo real, a través de los estándares para la web 2.0.
+                Desde el <strong>Equipo Trazos</strong> desarrollamos tecnologías de Software Libre utilizadas en proyectos artísticos
+                 independientes, programas educativos, sociales y comunitarios, y múltiples espacios de formación, especialmente de
+                  educación pública. También ofrecemos seminarios, talleres, y organización de eventos y actividades colaborativas.
                 </p>
                 
                 <p class="link">
@@ -105,23 +105,8 @@
                 <div>
                     <ul>
                         <li>
-                            El proyecto surgió del trabajo conjunto de Andrés Colubri y Marcela Rapallo 
-                            en el desarrollo de tecnologías libres para dibujo en vivo y <a href="https://www.youtube.com/watch?v=9IcbwkoXfTs" target="_blank">obras teatrales y performáticas</a> con las plataformas <a href="http://www.moldeo.org/" target="_blank">Moldeo</a> y <a href="https://github.com/andiamo/andiamo" target="_blank">Andiamo</a>. También del trabajo de
-                                Andrés Colubri en el desarrollo de <a href="https://processing.org/" target="_blank">Processing</a>, y de los proyectos pedagógicos 
-                                de Marcela Rapallo centrados en el <a href="https://www.youtube.com/playlist?list=PLLA0_JIKZmaL7rd19wnZEepKbU2FPlbaX" target="_blank">dibujo en escena</a>
-                                y el <a href="https://www.youtube.com/watch?v=LBqEtj6JOlU" target="_blank">dibujo colectivo</a>.
+                            El proyecto surgió del trabajo conjunto de Andrés Colubri y Marcela Rapallo en el desarrollo de tecnologías libres para dibujo en vivo y obras teatrales y performáticas con las plataformas Moldeo y Andiamo. También del trabajo de Andrés Colubri en el desarrollo de Processing, y de los proyectos pedagógicos de Marcela Rapallo centrados en el dibujo en escena y el dibujo colectivo.
                         </li>
-                        <li>
-                            El primer prototipo de trazos.club se realizó gracias a ser seleccionado por el
-                            Programa Universidad, Diseño y Desarrollo Productivo del Ministerio de Educación 
-                            de la Nación, como proyecto de desarrollo de la <a href="http://una.edu.ar/">UNA (Universidad Nacional de las 
-                            Artes de Argentina)</a>, contando con la dirección académica de Gabriel Gendin y la 
-                            colaboración de un equipo interdisciplinario de estudiantes y profesores de las 
-                            diferentes unidades académicas de la Universidad.
-                        </li>
-                        <!-- <li>
-                            Participaron en la programación del proyecto en sus primeros pasos: Leandro Garber, Leslie Watkins y Nahuel Coppero.
-                        </li> -->
                     </ul>
                 </div>
             </div>
