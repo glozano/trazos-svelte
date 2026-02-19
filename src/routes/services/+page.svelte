@@ -9,27 +9,25 @@
   import { languageStore } from '$lib/stores/languageStore';
 
   $: text = copy[$languageStore];
-  const PRESENTATION_FALLBACK_URL =
-    'https://docs.google.com/document/d/1cWVBmtiji0_KpnJ54Fbaa1DNiLk31FXdLGg2NmxHIUo/edit?tab=t.0';
-
+  
   $: presentationCards = [
     {
       ...text.services.presentations[0],
       image: workshopImage,
       contactHref: '/contact?reason=talleres',
-      presentationHref: PRESENTATION_FALLBACK_URL
+      presentationHref: "https://drive.google.com/file/d/1T1ZsfmctS5gUi-7HYe0DtBfGGciCsj0g/view?usp=sharing"
     },
     {
       ...text.services.presentations[1],
       image: performanceImage,
       contactHref: '/contact?reason=eventos',
-      presentationHref: PRESENTATION_FALLBACK_URL
+      presentationHref: "https://drive.google.com/file/d/1GWz7d7x6X80zHDbshQl1WJVXM4dW_k31/view?usp=sharing"
     },
     {
       ...text.services.presentations[2],
       image: activityImage,
       contactHref: '/contact?reason=actividades_colaborativas',
-      presentationHref: PRESENTATION_FALLBACK_URL
+      presentationHref: "https://drive.google.com/file/d/1Sd0pqqVF2p180yhipRQc2FhEhn8Q5Are/view?usp=sharing"
     }
   ];
 </script>
