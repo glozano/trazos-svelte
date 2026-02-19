@@ -1,25 +1,9 @@
-@font-face {
-  font-family: 'Fixture Condensed';
-  src: local('Fixture Condensed Semibold'), local('Fixture Condensed');
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Futura Local';
-  src: local('Futura PT Demi'), local('Futura Medium'), local('Futura');
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-}
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Jost:wght@500;600;700&family=Roboto+Mono:wght@300;400;500;700&display=swap');
 
 :root {
   --trz-font-body: 'Roboto Mono', monospace;
-  --trz-font-display: 'Fixture Condensed', 'Futura PT', 'Futura Local', 'Futura',
-    'Arial Narrow', 'Roboto', sans-serif;
-  --trz-font-ui: 'Futura Local', 'Futura PT', 'Futura', 'Avenir Next', 'Helvetica Neue',
-    sans-serif;
+  --trz-font-display: 'Barlow', 'Jost', 'Arial Narrow', 'Roboto', sans-serif;
+  --trz-font-ui: 'Jost', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   --trz-font-mono: 'Roboto Mono', monospace;
   --trz-accent: #00ff00;
   --trz-dark: #060a0f;
@@ -33,6 +17,7 @@
 .trazos-page {
   color: var(--trz-muted);
   font-family: var(--trz-font-body);
+  font-weight: 300;
 }
 
 .trazos-title {

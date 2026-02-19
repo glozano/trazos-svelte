@@ -11,16 +11,20 @@
   export let language = 'es';
 
   const dispatch = createEventDispatcher();
+  const drawerId = 'site-nav-drawer';
   let drawerOpen = false;
 
   function onLanguageChange(event) {
-    drawerOpen = false;
     dispatch('languageChange', event.target.value);
   }
 
   function goToNewBoard() {
     drawerOpen = false;
     goto(`/board/${generateRoomId()}`);
+  }
+
+  function openDrawer() {
+    drawerOpen = true;
   }
 
   function closeDrawer() {
@@ -32,28 +36,45 @@
   <a class="brand" href="/">
     <img class="brand-logo" src={logo} alt="Trazos.club" />
   </a>
-  <button
-    class="menu-toggle"
-    type="button"
-    on:click={() => (drawerOpen = true)}
-    aria-label="Open menu"
-    aria-expanded={drawerOpen}>☰</button
-  >
-  <nav class="links">
+
+ 
+  <nav class="links" aria-label="Primary navigation">
     <a class:active={current === 'home'} href="/">{labels.home}</a>
     <a class:active={current === 'info'} href="/info">{labels.info}</a>
     <a class:active={current === 'services'} href="/services">{labels.services}</a>
-    <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">{labels.community}</a>
+    <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">
+      {labels.community}
+    </a>
   </nav>
+
   <div class="actions">
-    <button class="draw-cta" type="button" on:click={goToNewBoard}>{labels.draw}</button>
     <label class="language">
-      <select value={language} on:change={onLanguageChange}>
+      <span class="visually-hidden">{labels.language}</span>
+      <select value={language} on:change={onLanguageChange} aria-label={labels.language}>
         <option value="es">ES</option>
         <option value="en">EN</option>
       </select>
     </label>
+    <button class="draw-cta" type="button" on:click={goToNewBoard}>{labels.draw}</button>
   </div>
+
+  <label class="language mobile-language">
+    <span class="visually-hidden">{labels.language}</span>
+    <select value={language} on:change={onLanguageChange} aria-label={labels.language}>
+      <option value="es">ES</option>
+      <option value="en">EN</option>
+    </select>
+  </label>
+
+  <button
+    class="menu-toggle"
+    type="button"
+    on:click={openDrawer}
+    aria-controls={drawerId}
+    aria-expanded={drawerOpen}
+    aria-label={drawerOpen ? 'Close menu' : 'Open menu'}>☰</button
+  >
+
 </header>
 
 <button
@@ -62,85 +83,69 @@
   type="button"
   on:click={closeDrawer}
   aria-label="Close menu backdrop"></button>
-<aside class:open={drawerOpen} class="mobile-drawer">
+
+<aside id={drawerId} class:open={drawerOpen} class="mobile-drawer" aria-hidden={!drawerOpen}>
   <div class="drawer-head">
-    <!-- <img class="drawer-logo" src={logo} alt="Trazos.club" /> -->
+    <a class="drawer-brand" href="/" on:click={closeDrawer}>
+      <img class="drawer-logo" src={logo} alt="Trazos.club" />
+    </a>
     <button type="button" class="drawer-close" on:click={closeDrawer} aria-label="Close menu">×</button>
   </div>
 
-  <nav class="drawer-links">
+  <nav class="drawer-links" aria-label="Mobile navigation">
     <a class:active={current === 'home'} href="/" on:click={closeDrawer}>{labels.home}</a>
     <a class:active={current === 'info'} href="/info" on:click={closeDrawer}>{labels.info}</a>
     <a class:active={current === 'services'} href="/services" on:click={closeDrawer}>{labels.services}</a>
-    <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer" on:click={closeDrawer}
-      >{labels.community}</a
-    >
-  </nav>
-
-  <div class="drawer-actions">
+    <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer" on:click={closeDrawer}>
+      {labels.community} <span class="external-indicator" aria-hidden="true">&#8599;</span>
+    </a>
     <button class="draw-cta" type="button" on:click={goToNewBoard}>{labels.draw}</button>
-    <label class="language">
-      <span>{labels.language}</span>
-      <select value={language} on:change={onLanguageChange}>
-        <option value="es">ES</option>
-        <option value="en">EN</option>
-      </select>
-    </label>
-  </div>
+  </nav>
 </aside>
 
 <style>
   .site-nav {
     align-items: center;
-    background: rgba(6, 10, 15, 0.78);
-    backdrop-filter: blur(6px);
+    background: rgba(6, 10, 15, 0.82);
+    backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(0, 255, 0, 0.2);
     display: grid;
-    gap: 20px;
-    grid-template-columns: 1fr auto auto;
+    gap: 16px;
+    grid-template-columns: 1fr auto 1fr;
     left: 0;
-    padding: 18px 28px;
+    padding: 14px 24px;
     position: fixed;
     right: 0;
     top: 0;
-    z-index: 50;
+    z-index: 60;
   }
 
   .brand {
-    align-items: center;
-    display: flex;
+    justify-self: start;
     text-decoration: none;
   }
 
   .brand-logo {
     display: block;
-    height: 28px;
+    height: 30px;
     width: auto;
   }
 
-  .menu-toggle {
-    background: transparent;
-    border: none;
-    color: var(--trz-accent);
-    display: none;
-    font-family: var(--trz-font-ui);
-    font-size: 1rem;
-    line-height: 1;
-    padding: 7px 10px;
-  }
-
   .links {
-    display: flex;
-    gap: 16px;
+    align-items: center;
+    display: inline-flex;
+    gap: 18px;
+    justify-self: center;
   }
 
   .links a {
     color: var(--trz-muted);
     font-family: var(--trz-font-ui);
-    font-size: 0.88rem;
-    letter-spacing: 0.05em;
+    font-size: 0.92rem;
+    letter-spacing: 0.04em;
     text-decoration: none;
     text-transform: uppercase;
+    transition: color 0.18s ease;
   }
 
   .links a.active,
@@ -150,8 +155,9 @@
 
   .actions {
     align-items: center;
-    display: flex;
-    gap: 14px;
+    display: inline-flex;
+    gap: 10px;
+    justify-self: end;
   }
 
   .draw-cta {
@@ -171,7 +177,7 @@
   .language {
     align-items: center;
     color: var(--trz-muted);
-    display: flex;
+    display: inline-flex;
     font-family: var(--trz-font-ui);
     font-size: 0.82rem;
     gap: 8px;
@@ -188,8 +194,27 @@
     padding: 5px 8px;
   }
 
+  .menu-toggle {
+    align-items: center;
+    background: transparent;
+    border:none;
+    color: #00ff04;
+    cursor: pointer;
+    display: none;
+    font-family: var(--trz-font-display);
+    font-size: 1.36rem;
+    height: 46px;
+    justify-content: center;
+    line-height: 1;
+    width: 46px;
+  }
+
+  .mobile-language {
+    display: none;
+  }
+
   .drawer-backdrop {
-    background: rgba(0, 0, 0, 0.45);
+    background: rgba(0, 0, 0, 0.48);
     border: 0;
     inset: 0;
     opacity: 0;
@@ -197,7 +222,7 @@
     pointer-events: none;
     position: fixed;
     transition: opacity 0.2s ease;
-    z-index: 59;
+    z-index: 69;
   }
 
   .drawer-backdrop.open {
@@ -206,17 +231,19 @@
   }
 
   .mobile-drawer {
-    background: var(--trz-dark);
-    border-left: 1px solid rgba(0, 255, 0, 0.25);
+    background: linear-gradient(180deg, #071016 0%, #0b141d 100%);
+    border-left: 1px solid rgba(120, 255, 152, 0.26);
     bottom: 0;
-    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 16px 20px;
     position: fixed;
     right: 0;
     top: 0;
     transform: translateX(102%);
     transition: transform 0.24s ease;
-    width: min(82vw, 340px);
-    z-index: 60;
+    width: min(84vw, 340px);
+    z-index: 70;
   }
 
   .mobile-drawer.open {
@@ -227,11 +254,15 @@
     align-items: center;
     display: flex;
     justify-content: space-between;
-    margin-bottom: 16px;
+  }
+
+  .drawer-brand {
+    margin: 0 auto 0 0;
   }
 
   .drawer-logo {
-    height: 26px;
+    display: block;
+    height: 30px;
     width: auto;
   }
 
@@ -240,25 +271,37 @@
     border: 0;
     color: var(--trz-accent);
     cursor: pointer;
-    font-size: 1.5rem;
+    font-size: 1.7rem;
     line-height: 1;
     padding: 0;
   }
 
   .drawer-links {
+    align-items: center;
     border-top: 1px solid rgba(0, 255, 0, 0.2);
     display: flex;
+    flex: 1;
     flex-direction: column;
-    gap: 16px;
-    padding-top: 14px;
+    gap: 14px;
+    padding-top: 32px;
+    margin-top:32px;
+    text-align: center;
   }
 
-  .drawer-links a {
-    color: var(--trz-muted);
+  .drawer-links button {
+    font-size: 1.04rem;
+    letter-spacing: 0.05em;
+    padding: 8px 32px;
+  }
+
+  .drawer-links a{
+    color: #d6dce1;
     font-family: var(--trz-font-ui);
+    font-size: 1.04rem;
     letter-spacing: 0.05em;
     text-decoration: none;
     text-transform: uppercase;
+    transition: color 0.16s ease;
   }
 
   .drawer-links a.active,
@@ -266,31 +309,42 @@
     color: var(--trz-accent);
   }
 
-  .drawer-actions {
-    border-top: 1px solid rgba(0, 255, 0, 0.2);
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 18px;
-    padding-top: 14px;
+  .external-indicator {
+    font-size: 0.82rem;
+    margin-left: 4px;
+  }
+
+  .visually-hidden {
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
   }
 
   @media (max-width: 1024px) {
     .site-nav {
-      grid-template-columns: 1fr auto;
-      padding: 14px 16px;
+      grid-template-columns: auto 1fr auto;
+      padding: 10px 12px;
     }
 
-    .links {
-      display: none;
-    }
-
+    .brand,
+    .links,
     .actions {
       display: none;
     }
 
     .menu-toggle {
       display: inline-flex;
+      justify-self: end;
+    }
+
+    .mobile-language {
+      display: inline-flex;
+      justify-self: start;
     }
   }
 </style>

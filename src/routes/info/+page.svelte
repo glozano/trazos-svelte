@@ -377,12 +377,14 @@
 
   .team-heading {
     margin: 0 0 20px;
-    text-align: left;
+    text-align: center;
+    font-family: var(--trz-font-ui);
   }
 
   #quienes-somos p {
     color: var(--trz-light-text);
     margin: 0;
+    text-align: center;
   }
 
   #quienes-somos a {
@@ -398,7 +400,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 18px;
-    justify-content: flex-start;
+    justify-content: center;
     margin: 0 0 24px;
   }
 
@@ -534,7 +536,7 @@
 
   @media (max-width: 1000px) {
     #intro {
-      background: none;
+      background-position: center;
       padding-top: 96px;
     }
 

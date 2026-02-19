@@ -27,10 +27,16 @@ export const copy = {
       description:
         'Creá una sala nueva en segundos o entrá a una sala existente para dibujar con tu comunidad.',
       newBoard: 'Crear sala nueva',
+      privateBoard: 'Crear sala privada',
+      privateHint: 'Las salas privadas no aparecen en el listado de salas activas.',
       joinTitle: 'Entrar por código',
       joinPlaceholder: 'Código de sala',
       joinAction: 'Entrar a la sala',
-      helper: 'Tip: compartí el enlace de la sala para dibujar en simultáneo.'
+      helper: 'Tip: compartí el enlace de la sala para dibujar en simultáneo.',
+      activeTitle: 'Salas activas',
+      activeLoading: 'Cargando salas activas...',
+      activeEmpty: 'No hay salas públicas activas por ahora.',
+      activeOnlineLabel: 'en línea'
     },
     info: {
       title: 'Proyecto',
@@ -138,10 +144,16 @@ export const copy = {
       description:
         'Create a room in seconds or join an existing board to draw with your community.',
       newBoard: 'Create new board',
+      privateBoard: 'Create private board',
+      privateHint: 'Private boards are hidden from the active boards list.',
       joinTitle: 'Join with code',
       joinPlaceholder: 'Room code',
       joinAction: 'Join board',
-      helper: 'Tip: share the board link so everyone can draw in real time.'
+      helper: 'Tip: share the board link so everyone can draw in real time.',
+      activeTitle: 'Active boards',
+      activeLoading: 'Loading active boards...',
+      activeEmpty: 'No public boards are active right now.',
+      activeOnlineLabel: 'online'
     },
     info: {
       title: 'Project',

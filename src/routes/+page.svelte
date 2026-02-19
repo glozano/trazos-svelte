@@ -91,6 +91,7 @@
   }
 
   .description {
+    font-weight: 200;
     font-size: 1.08rem;
     line-height: 1.55;
     margin: 0 auto 28px;
@@ -124,6 +125,7 @@
     .description {
       font-size: 1rem;
       max-width: 92%;
+      font-weight: 200;
     }
   }
 
