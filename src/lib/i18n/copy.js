@@ -136,7 +136,7 @@ export const copy = {
       description:
         'A web platform for collective drawing where multiple people draw simultaneously with animated strokes.',
       primaryCta: 'Start drawing',
-      secondaryCta: 'Open boards',
+      secondaryCta: 'See boards',
       tertiaryCta: 'Read the vision'
     },
     boards: {
