@@ -1,0 +1,72 @@
+@font-face {
+  font-family: 'Fixture Condensed';
+  src: local('Fixture Condensed Semibold'), local('Fixture Condensed');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Futura Local';
+  src: local('Futura PT Demi'), local('Futura Medium'), local('Futura');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+:root {
+  --trz-font-body: 'Roboto Mono', monospace;
+  --trz-font-display: 'Fixture Condensed', 'Futura PT', 'Futura Local', 'Futura',
+    'Arial Narrow', 'Roboto', sans-serif;
+  --trz-font-ui: 'Futura Local', 'Futura PT', 'Futura', 'Avenir Next', 'Helvetica Neue',
+    sans-serif;
+  --trz-font-mono: 'Roboto Mono', monospace;
+  --trz-accent: #00ff00;
+  --trz-dark: #060a0f;
+  --trz-dark-soft: #111821;
+  --trz-muted: #babcbe;
+  --trz-light: #ffffff;
+  --trz-light-text: #231f20;
+  --trz-line: #27303a;
+}
+
+.trazos-page {
+  color: var(--trz-muted);
+  font-family: var(--trz-font-body);
+}
+
+.trazos-title {
+  color: var(--trz-accent);
+  font-family: var(--trz-font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.trazos-button {
+  background: var(--trz-accent);
+  border: 0;
+  border-radius: 999px;
+  color: #101215;
+  cursor: pointer;
+  display: inline-block;
+  font-family: var(--trz-font-ui);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 11px 18px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.trazos-button.ghost {
+  background: transparent;
+  border: 1px solid var(--trz-accent);
+  color: var(--trz-accent);
+}
+
+.trazos-button.neutral {
+  background: transparent;
+  border: 1px solid #46515d;
+  color: #e2e5e7;
+}
