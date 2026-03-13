@@ -41,6 +41,7 @@
   <nav class="links" aria-label="Primary navigation">
     <a class:active={current === 'home'} href="/">{labels.home}</a>
     <a class:active={current === 'info'} href="/info">{labels.info}</a>
+    <a class:active={current === 'socios'} href="/socios">{labels.socios}</a>
     <a class:active={current === 'services'} href="/services">{labels.services}</a>
     <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">
       {labels.community}
@@ -95,6 +96,7 @@
   <nav class="drawer-links" aria-label="Mobile navigation">
     <a class:active={current === 'home'} href="/" on:click={closeDrawer}>{labels.home}</a>
     <a class:active={current === 'info'} href="/info" on:click={closeDrawer}>{labels.info}</a>
+    <a class:active={current === 'socios'} href="/socios" on:click={closeDrawer}>{labels.socios}</a>
     <a class:active={current === 'services'} href="/services" on:click={closeDrawer}>{labels.services}</a>
     <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer" on:click={closeDrawer}>
       {labels.community} <span class="external-indicator" aria-hidden="true">&#8599;</span>

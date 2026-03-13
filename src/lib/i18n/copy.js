@@ -3,6 +3,7 @@ export const copy = {
     nav: {
       home: 'Inicio',
       info: 'Info',
+      socios: 'Socios',
       services: 'Servicios',
       community: 'Comunidad',
       boards: 'Boards',
@@ -20,7 +21,12 @@ export const copy = {
         'Plataforma web para dibujo colectivo donde varias personas dibujan en simultáneo con trazos animados.',
       primaryCta: 'Comenzar a dibujar',
       secondaryCta: 'Ver salas',
-      tertiaryCta: 'Conocer la visión'
+      tertiaryCta: 'Conocer la visión',
+      mobileSectionCta: {
+        vision: 'Conocer la vision',
+        services: 'Servicios y experiencias',
+        support: 'Apoyá el proyecto'
+      }
     },
     boards: {
       title: 'Salas de dibujo',
@@ -85,6 +91,63 @@ export const copy = {
         'Si hay mayor interés en estas propuestas, pueden enviarnos un correo y coordinamos una conversación.',
       contactCta: 'Enviar correo'
     },
+    socios: {
+      title: 'Socios',
+      leadTitle: 'Aportá a Trazos Club',
+      intro: [
+        'Trazos Club es un proyecto independiente de software libre y comunidad: una plataforma gratuita para dibujar y crear en vivo, en colectivo y en tiempo real, usada en proyectos artísticos, educativos y comunitarios en distintos países.',
+        'Tu aporte sostiene infraestructura, organización de comunidad y continuidad del desarrollo, para que Trazos Club siga siendo independiente, abierta, libre y gratuita.'
+      ],
+      contributeTitle: 'Cómo aportar',
+      contributeText:
+        'Podés colaborar con aportes únicos o mensuales, a través de PayPal o Mercado Pago.',
+      supportMethodsTitle: 'Apoyos',
+      supportMethods: [
+        {
+          title: 'PayPal',
+          description: 'Aporte libre por PayPal.',
+          cta: 'Aportar con PayPal',
+          href: 'https://www.paypal.com/donate/?hosted_button_id=DDDVYYWPEZE4G'
+        },
+        {
+          title: 'Mercado Pago',
+          description: 'Aporte único por Mercado Pago.',
+          cta: 'Hacer aporte único',
+          href: 'https://link.mercadopago.com.ar/trazosclub'
+        }
+      ],
+      monthlyTitle: 'Aportes mensuales',
+      monthlyOptions: [
+        {
+          label: 'Trazos Club * Mensual $6000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=f1394a980ceb471d9e2ef34104dd7bfa'
+        },
+        {
+          label: 'Trazos Club * Mensual $12000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=30c2091c920249e39b219156d0bb823b'
+        },
+        {
+          label: 'Trazos Club * Mensual $18000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=d2d5f4af26ea4e4aa4aad1229c4ddef1'
+        },
+        {
+          label: 'Trazos Club * Mensual $24000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=2eb75c9a2e2a4689b2bf731ec8849f4e'
+        },
+        {
+          label: 'Trazos Club * Mensual $30000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=195a3ae207494854b65bc84ffb2e2667'
+        }
+      ],
+      circulateTitle: 'Cómo ayudar a que circule',
+      circulate: [
+        'Nombrar y visibilizar el software libre es una forma de cuidar el trabajo colectivo y fortalecer redes.',
+        'Cuando uses la plataforma, mencioná trazos.club, usá #TrazosClub y #SoftwareLibre, y etiquetá en Instagram @trazos.club.'
+      ],
+      otherWaysTitle: '¿Querés colaborar de otra manera?',
+      otherWaysText: 'Escribinos a info@trazos.club',
+      otherWaysCta: 'Escribinos'
+    },
     contact: {
       title: 'Contacto',
       subtitle:
@@ -120,6 +183,7 @@ export const copy = {
     nav: {
       home: 'Home',
       info: 'Info',
+      socios: 'Members',
       services: 'Services',
       community: 'Community',
       boards: 'Boards',
@@ -137,7 +201,12 @@ export const copy = {
         'A web platform for collective drawing where multiple people draw simultaneously with animated strokes.',
       primaryCta: 'Start drawing',
       secondaryCta: 'See boards',
-      tertiaryCta: 'Read the vision'
+      tertiaryCta: 'Read the vision',
+      mobileSectionCta: {
+        vision: 'Read the vision',
+        services: 'Services and experiences',
+        support: 'Support the project'
+      }
     },
     boards: {
       title: 'Drawing boards',
@@ -201,6 +270,63 @@ export const copy = {
       closing:
         'If you are interested in these proposals, send us an email and we can schedule a conversation.',
       contactCta: 'Send email'
+    },
+    socios: {
+      title: 'Support',
+      leadTitle: 'Support Trazos Club',
+      intro: [
+        'Trazos Club is an independent free software and community project: a free platform for drawing and creating live, collectively, and in real time, used in artistic, educational, and community projects across different countries.',
+        'Your contribution supports infrastructure, community organization, and development continuity so Trazos Club can remain independent, open, free, and accessible.'
+      ],
+      contributeTitle: 'How to contribute',
+      contributeText:
+        'You can collaborate with one-time or monthly contributions through PayPal or Mercado Pago.',
+      supportMethodsTitle: 'Support options',
+      supportMethods: [
+        {
+          title: 'PayPal',
+          description: 'Flexible contribution via PayPal.',
+          cta: 'Contribute with PayPal',
+          href: 'https://www.paypal.com/donate/?hosted_button_id=DDDVYYWPEZE4G'
+        },
+        {
+          title: 'Mercado Pago',
+          description: 'One-time contribution via Mercado Pago.',
+          cta: 'Make a one-time contribution',
+          href: 'https://link.mercadopago.com.ar/trazosclub'
+        }
+      ],
+      monthlyTitle: 'Monthly contributions',
+      monthlyOptions: [
+        {
+          label: 'Trazos Club * Monthly $6000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=f1394a980ceb471d9e2ef34104dd7bfa'
+        },
+        {
+          label: 'Trazos Club * Monthly $12000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=30c2091c920249e39b219156d0bb823b'
+        },
+        {
+          label: 'Trazos Club * Monthly $18000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=d2d5f4af26ea4e4aa4aad1229c4ddef1'
+        },
+        {
+          label: 'Trazos Club * Monthly $24000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=2eb75c9a2e2a4689b2bf731ec8849f4e'
+        },
+        {
+          label: 'Trazos Club * Monthly $30000',
+          href: 'https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=195a3ae207494854b65bc84ffb2e2667'
+        }
+      ],
+      circulateTitle: 'How to help it circulate',
+      circulate: [
+        'Naming and making free software visible is one way to care for collective work and strengthen networks.',
+        'When you use the platform, mention trazos.club, use #TrazosClub and #SoftwareLibre, and tag Instagram @trazos.club.'
+      ],
+      otherWaysTitle: 'Want to collaborate in another way?',
+      otherWaysText: 'Write to us at info@trazos.club',
+      otherWaysCta: 'Write to us'
     },
     contact: {
       title: 'Contact',

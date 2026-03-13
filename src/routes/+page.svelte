@@ -19,6 +19,11 @@
 
   $: text = copy[$languageStore];
   $: closeLabel = $languageStore === 'es' ? 'Volver al inicio' : 'Back to home';
+  $: mobileSectionLinks = [
+    { label: text.home.mobileSectionCta.vision, href: '/info' },
+    { label: text.home.mobileSectionCta.services, href: '/services' },
+    { label: text.home.mobileSectionCta.support, href: '/socios' }
+  ];
 
   function goToBoard() {
     goto(`/board/${generateRoomId()}`);
@@ -108,9 +113,16 @@
             <span class="boards-counter">({activeBoards.length})</span>
           {/if}
         </button>
-        <button type="button" class="trazos-button neutral" on:click={() => goto('/info')}>
+        <button type="button" class="trazos-button neutral home-tertiary" on:click={() => goto('/info')}>
           {text.home.tertiaryCta}
         </button>
+      </div>
+      <div class="mobile-links" aria-label="Secondary actions">
+        {#each mobileSectionLinks as link}
+          <button type="button" class="trazos-button neutral small-mobile-link" on:click={() => goto(link.href)}>
+            {link.label}
+          </button>
+        {/each}
       </div>
     </section>
 
@@ -278,6 +290,10 @@
 
   .actions button {
     min-width: 180px;
+  }
+
+  .mobile-links {
+    display: none;
   }
 
   .boards-counter {
@@ -448,6 +464,33 @@
       font-size: 1rem;
       max-width: 92%;
       font-weight: 200;
+    }
+
+    .actions {
+      max-width: 320px;
+      width: 100%;
+    }
+
+    .actions button {
+      width: 100%;
+    }
+
+    .home-tertiary {
+      display: none;
+    }
+
+    .mobile-links {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+      max-width: 320px;
+      width: 100%;
+    }
+
+    .small-mobile-link {
+      justify-content: center;
+      min-height: 42px;
+      width: 100%;
     }
 
     .board-modal {
