@@ -14,7 +14,7 @@
     <!-- -------- <br/> -->
     <!-- Lineas del resto: {otherGesturesPerFrame} <br/> -->
     <!-- -------- <br/> -->
-    <!-- Loaded gestures: {prevLines.length} <br/> -->
+    <!-- Loaded gestures: {replayQueue.length} <br/> -->
     <!-- -------- <br/> -->
     <!-- FPS: {Math.round(frameRate)} <br/>
     -------- <br/> -->
@@ -26,14 +26,18 @@
     import {StrokeGesture} from '$lib/andiamo/stroke';
     import {p, canvas, currentRibbon,currentGesture,prevGesture, canvasParams, layers, reset, openModals} from '$lib/stores/boardStore';
     import {id, socket, clientConnect} from '$lib/stores/socketStore';
+    import { loadCanvasUsername } from '$lib/stores/usernameStore';
     import MultiMap from '$lib/andiamo/multimap';
     import HashMap from '$lib/andiamo/hashmap';
     import {DELETE_FACTOR} from '$lib/andiamo/parameters';
 
+    const REPLAY_SPEED_MULTIPLIER = 2;
+    const REPLAY_MAX_GAP_MS = 120;
+    const REPLAY_MAX_EVENTS_PER_FRAME = 80;
+
     var _p5;
-    var loadingLines = false;
-    var prevLines = [];
-    var remainingLines = 0;
+    var replayQueue = [];
+    var replayStartAt = null;
     var otherRibbons = new HashMap();
     var gesturesPerFrame = 0;
     var myGesturesPerFrame = 0;
@@ -49,7 +53,8 @@
     ];
 
     onMount(() => {
-        clientConnect();
+        var storedUsername = loadCanvasUsername();
+        clientConnect(storedUsername);
         $socket.on('externalMouseEvent', externalMouseEvent);
         $socket.on('deleteEvent', deleteHandler);
         $socket.on("connect", () => {
@@ -67,10 +72,8 @@
         
         // Cargar lineas previas
         $socket.on('previousLines', async function(lines){
-            if(!loadingLines){
-                prevLines = lines
-                loadingLines = true;
-            }
+            replayQueue = buildReplayQueue(lines);
+            replayStartAt = null;
         });
     });
     onDestroy(()=>{
@@ -91,17 +94,10 @@
 		};
 
 		p5.draw = () => {
-			p5.background(0);
+            p5.background(0);
             otherGesturesCount = 0;
             myGestureCount = 0;
-            // Cargar lineas previas
-            if(prevLines.length > 0){
-                // console.log("mando1");
-                prevLines.splice(0,4).forEach((line)=>{
-                    // console.log("mando2");
-                    externalMouseEvent(line.data);
-                });
-            }
+            drainReplayQueue(p5);
             var t = p5.millis();
             // Iterar sobre las capas disponibles, empezando desde la ultima
             for (var i = $layers.length - 1; 0 <= i; i--) {
@@ -144,6 +140,52 @@
         p5.touchMoved = (event)=>gestureDrag(p5, event);
         p5.touchEnded = (event)=>gestureFinish(p5, event);
 	};
+
+    function parseEventTimestamp(timestamp){
+        if(!timestamp) return null;
+        var millis = new Date(timestamp).getTime();
+        if(Number.isFinite(millis)) return millis;
+        return null;
+    }
+
+    function buildReplayQueue(lines){
+        var queue = [];
+        var replayOffset = 0;
+        var prevTimestamp = null;
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var currentTimestamp = parseEventTimestamp(line.timestamp);
+            if (prevTimestamp !== null && currentTimestamp !== null) {
+                var realGap = Math.max(0, currentTimestamp - prevTimestamp);
+                var cappedGap = Math.min(realGap, REPLAY_MAX_GAP_MS);
+                replayOffset += cappedGap / REPLAY_SPEED_MULTIPLIER;
+            } else if (i > 0) {
+                replayOffset += 1000 / 60;
+            }
+            queue.push({
+                at: replayOffset,
+                data: line.data
+            });
+            if (currentTimestamp !== null) prevTimestamp = currentTimestamp;
+        }
+        return queue;
+    }
+
+    function drainReplayQueue(p5){
+        if(!replayQueue.length) return;
+        if(replayStartAt === null) replayStartAt = p5.millis();
+        var elapsed = p5.millis() - replayStartAt;
+        var processed = 0;
+        while(
+            replayQueue.length &&
+            replayQueue[0].at <= elapsed &&
+            processed < REPLAY_MAX_EVENTS_PER_FRAME
+        ){
+            var item = replayQueue.shift();
+            externalMouseEvent(item.data);
+            processed++;
+        }
+    }
 
 
     // Parece que el dissapearing y el alpha se comparten con el board Y la velocidad tambien???
@@ -219,7 +261,9 @@
     function deleteHandler(data) {
         var layer = data.layer;
         var id = data.id;
-        if(otherGestures[layer]) var gestures = otherGestures[layer].get(id);
+        var gestures = null;
+        if(otherGestures[layer]) gestures = otherGestures[layer].get(id);
+        if(!gestures || !gestures.length) return;
         for (var idx in gestures) {
             var g = gestures[idx];
             // if (g.layer == layer) {

@@ -5,6 +5,8 @@
 	"scripts": {
 		"dev": "vite dev",
 		"start": "node ./server",
+		"start:memory-on": "node ./server/start-memory.js on",
+		"start:memory-off": "node ./server/start-memory.js off",
 		"build": "vite build",
 		"preview": "vite preview",
 		"lint": "eslint .",
