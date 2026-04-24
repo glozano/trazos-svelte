@@ -15,7 +15,7 @@ import { MongoClient }  from 'mongodb'
 
 const MEMORY_ENABLED = parseBoolean(process.env.TRAZOS_MEMORY_ENABLED, true);
 const port = Number(process.env.PORT || 3000);
-const mongoUrl = process.env.MONGO_URL || 'mongodb://localhost:27017';
+const mongoUrl = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017';
 const mongoDbName = process.env.MONGO_DB_NAME || 'mongo_trazos';
 const mongoCollectionName = process.env.MONGO_LINES_COLLECTION || 'lines';
 const memoryTtlSeconds = Math.max(1, parseNumber(process.env.TRAZOS_MEMORY_TTL_SECONDS, 3 * 60 * 60));
@@ -148,6 +148,25 @@ function getBoardUsers(roomId) {
     return getConnectedBoardClients(roomId).map((client) => client.username || '');
 }
 
+function normalizeViewportDimension(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+    return Math.round(parsed);
+}
+
+function getBoardCanvasSize(roomId) {
+    const boardClients = getConnectedBoardClients(roomId);
+    let width = 0;
+    let height = 0;
+    for (const client of boardClients) {
+        const clientWidth = normalizeViewportDimension(client?.viewport?.width);
+        const clientHeight = normalizeViewportDimension(client?.viewport?.height);
+        if (clientWidth > width) width = clientWidth;
+        if (clientHeight > height) height = clientHeight;
+    }
+    return { width, height };
+}
+
 app.get('/api/boards/active', function(req, res) {
     res.setHeader('Content-Type', 'application/json');
     res.send(JSON.stringify({
@@ -197,6 +216,28 @@ io.on('connection', function(socket) {
         });
     }
 
+    function getClientRecord() {
+        return clients.find((client) => client.socketId == socket.id);
+    }
+
+    function setClientViewport(rawViewport) {
+        var client = getClientRecord();
+        if (!client || !rawViewport) return;
+        const width = normalizeViewportDimension(rawViewport.width);
+        const height = normalizeViewportDimension(rawViewport.height);
+        if (!width || !height) return;
+        client.viewport = { width, height };
+    }
+
+    function emitBoardCanvasInfo() {
+        const canvasSize = getBoardCanvasSize(room_id);
+        io.to(room_id).emit('boardCanvasInfo', {
+            roomId: room_id,
+            width: canvasSize.width,
+            height: canvasSize.height
+        });
+    }
+
     function setCanvasUsername(rawUsername) {
         var normalizedUsername = normalizeUsername(rawUsername);
         if (!normalizedUsername) return '';
@@ -224,6 +265,7 @@ io.on('connection', function(socket) {
         users: getBoardUsers(room_id)
     });
     emitBoardPresence();
+    emitBoardCanvasInfo();
     if (socket.recovered) {
         // console.log("recuperado pa");
         log.push(
@@ -251,18 +293,30 @@ io.on('connection', function(socket) {
 
     socket.on('clientConnectionEvent', async function(data) {
         var normalizedUsername = setCanvasUsername(data?.username);
-        clients.push({
-            "socketId" : client_id,
-            "trazosId"  : data.id,
-            "board" : room_id,
-            "lines" : 0,
-            "ua" : uap(socket.request.headers['user-agent']).os,
-            "connected" : true,
-            "time" : new Date().toTimeString().split(' ')[0],
-            "username" : normalizedUsername
-        })
+        var existingClient = getClientRecord();
+        if (existingClient) {
+            existingClient.trazosId = data.id;
+            existingClient.board = room_id;
+            existingClient.connected = true;
+            existingClient.time = new Date().toTimeString().split(' ')[0];
+            existingClient.username = normalizedUsername;
+        } else {
+            clients.push({
+                "socketId" : client_id,
+                "trazosId"  : data.id,
+                "board" : room_id,
+                "lines" : 0,
+                "ua" : uap(socket.request.headers['user-agent']).os,
+                "connected" : true,
+                "time" : new Date().toTimeString().split(' ')[0],
+                "username" : normalizedUsername,
+                "viewport" : null
+            });
+        }
+        setClientViewport(data?.viewport);
 
         emitBoardPresence();
+        emitBoardCanvasInfo();
         announceBoardJoinIfNeeded(normalizedUsername);
         // clients[client_id] = data.id;
         // console.log("Se conecto el usuario " + data.id);
@@ -286,6 +340,11 @@ io.on('connection', function(socket) {
         var normalizedUsername = setCanvasUsername(data?.username);
         emitBoardPresence();
         announceBoardJoinIfNeeded(normalizedUsername);
+    });
+
+    socket.on('boardViewport', function(data) {
+        setClientViewport(data);
+        emitBoardCanvasInfo();
     });
 
     // Mensaje del chat
@@ -398,6 +457,11 @@ io.on('connection', function(socket) {
 
     // Desconexion de un cliente
     socket.on('disconnect', function() {
+        var disconnectedClient = getClientRecord();
+        if (disconnectedClient) {
+            disconnectedClient.connected = false;
+            disconnectedClient.viewport = null;
+        }
         if(chatUser){
             chatConnections[room_id].qty--;
             for (var i=chatConnections[room_id].usernames.length-1; i>=0; i--) {
@@ -447,7 +511,10 @@ io.on('connection', function(socket) {
                 db.collection(mongoCollectionName).deleteMany({"board":room_id});
             }
         }
-        if (boards[room_id]) emitBoardPresence();
+        if (boards[room_id]) {
+            emitBoardPresence();
+            emitBoardCanvasInfo();
+        }
         
         
         // delete clients[client_id];
@@ -455,9 +522,6 @@ io.on('connection', function(socket) {
             "Usuario "+socket.id+" desconectado en board "+room_id+" a las "+new Date().toTimeString().split(' ')[0]
         );
         // console.dir(socket.id);
-        if(clients.find((el) => el.socketId == socket.id)){
-            clients.find((el) => el.socketId == socket.id).connected = false ;
-        }
     });
 
 

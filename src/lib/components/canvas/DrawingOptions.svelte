@@ -9,6 +9,8 @@
     import LayersIcon from '$lib/components/icons/LayersIcon.svelte';
     import {DELETE_FACTOR} from '$lib/andiamo/parameters';
     import SpeedIcon from '$lib/components/icons/SpeedIcon.svelte';
+    import HandIcon from '$lib/components/icons/HandIcon.svelte';
+    import PencilIcon from '$lib/components/icons/PencilIcon.svelte';
     import { onMount } from 'svelte';
 
     let minSize = 0.1;
@@ -58,6 +60,12 @@
         $canvasParams.color = color;
     }
 
+    function toggleInteractionMode(){
+        $canvasParams.interactionMode = $canvasParams.interactionMode === 'hand' ? 'pencil' : 'hand';
+    }
+
+    $: interactionLabel = $canvasParams.interactionMode === 'hand' ? 'Hand mode' : 'Pencil mode';
+
 </script>
 
 
@@ -101,6 +109,19 @@
         </FloatingOption>
     </div>
     <div class="floating-right">
+        <button
+            type="button"
+            class={`floating-opt interaction-toggle ${$canvasParams.interactionMode === 'hand' ? 'hand' : 'pencil'}`}
+            on:click={toggleInteractionMode}
+            aria-label={interactionLabel}
+            title={interactionLabel}
+        >
+            {#if $canvasParams.interactionMode === 'hand'}
+                <HandIcon active={true}></HandIcon>
+            {:else}
+                <PencilIcon active={true}></PencilIcon>
+            {/if}
+        </button>
         <FloatingOption>
             <div slot="selectedOption">
                 <!-- on:click={()=>$canvasParams.looping = !$canvasParams.looping} -->
@@ -167,7 +188,7 @@
         <FloatingOption>
             <div slot="optionSelector">
                 <div class="color-options" transition:fade={{ delay: 100, duration: 200 }}>
-                    {#each colors as color, i}
+                    {#each colors as color}
                         <div class="floating-opt color-opt" on:click={()=>setColor(color.rgb)}>
                             <div class="selected-color" style="background-color: {color.css};"></div>
                         </div>
@@ -200,6 +221,18 @@
     .selected-layer,.selected-speed,.selected-loop{
         display: flex;
         margin: auto;
+    }
+    .interaction-toggle{
+        align-items: center;
+        background: #212125;
+        border: 0.5px solid rgba(128, 128, 128, 0.634);
+        display: flex;
+        justify-content: center;
+        margin: 8px;
+        padding: 4px;
+    }
+    .interaction-toggle.hand{
+        box-shadow: 0 0 0 1px rgba(0, 255, 102, 0.5) inset;
     }
     
     .selected-color{
