@@ -218,14 +218,23 @@
     
     function deleteHandler(data) {
         var layer = data.layer;
-        var id = data.id;
-        if(otherGestures[layer]) var gestures = otherGestures[layer].get(id);
+        var deleteId = data.id;
+        fadeGestures(otherGestures[layer] ? otherGestures[layer].get(deleteId) : []);
+
+        if(deleteId == $id){
+            fadeGestures($layers[layer]);
+            if($currentGesture && $canvasParams.layer == layer){
+                $currentGesture.looping = false;
+                $currentGesture.fadeOutFact = DELETE_FACTOR;
+            }
+        }
+    }
+
+    function fadeGestures(gestures) {
+        if(!gestures) return;
         for (var idx in gestures) {
-            var g = gestures[idx];
-            // if (g.layer == layer) {
-            g.looping = false;
-            g.fadeOutFact = DELETE_FACTOR;
-            // }
+            gestures[idx].looping = false;
+            gestures[idx].fadeOutFact = DELETE_FACTOR;
         }
     }
     

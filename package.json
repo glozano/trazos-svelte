@@ -8,6 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"lint": "eslint .",
+		"admin:user": "node scripts/create-admin-user.js",
 		"prepare": "npm run smui-theme-light && npm run smui-theme-dark",
 		"smui-theme-light": "smui-theme compile static/smui.css -i src/theme",
 		"smui-theme-dark": "smui-theme compile static/smui-dark.css -i src/theme/dark"
