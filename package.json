@@ -4,14 +4,14 @@
 	"private": true,
 	"scripts": {
 		"dev": "vite dev",
-		"start": "node --env-file=.env ./server",
-		"start:memory-on": "node --env-file=.env ./server/start-memory.js on",
-		"start:memory-off": "node --env-file=.env ./server/start-memory.js off",
+		"start": "node ./server",
+		"start:memory-on": "node ./server/start-memory.js on",
+		"start:memory-off": "node ./server/start-memory.js off",
 		"build": "vite build",
 		"preview": "vite preview",
 		"test": "node --test",
 		"lint": "eslint .",
-		"admin:user": "node --env-file=.env scripts/create-admin-user.js",
+		"admin:user": "node scripts/create-admin-user.js",
 		"prepare": "npm run smui-theme-light && npm run smui-theme-dark",
 		"smui-theme-light": "smui-theme compile static/smui.css -i src/theme",
 		"smui-theme-dark": "smui-theme compile static/smui-dark.css -i src/theme/dark"

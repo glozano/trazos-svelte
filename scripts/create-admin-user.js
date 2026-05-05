@@ -1,3 +1,4 @@
+import '../server/load-env.js'
 import { MongoClient } from 'mongodb'
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto'
 import { promisify } from 'node:util'
