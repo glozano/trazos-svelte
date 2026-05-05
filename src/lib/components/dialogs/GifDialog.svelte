@@ -1,136 +1,104 @@
 <script>
-    import Dialog, { Title, Content, Actions } from '@smui/dialog';
+    import Dialog, { Content } from '@smui/dialog';
     import IconButton from '@smui/icon-button';
     import GiphyLogo from '$lib/images/giphy_logo.png'
-    import { page } from '$app/stores';
     export let showDialog = false;
-    import { gifStore } from '$lib/stores/gifStore';
+    import { onDestroy, onMount } from 'svelte';
+    import { registerGifCreator } from '$lib/stores/gifStore';
     import {p,canvas} from '$lib/stores/boardStore';
-    import { createGIF } from 'gifshot';
+    import { GIF_DEFAULTS } from '$lib/config/gif';
+    import { captureCanvasFrames, encodeGif, getGifDimensions } from '$lib/utils/gif';
 
-    let gifStatus = "Grabando el lienzo";
-    // "Generando Gif"
+    const states = {
+        idle: 'idle',
+        capturing: 'capturing',
+        encoding: 'encoding',
+        preview: 'preview',
+        uploading: 'uploading',
+        uploaded: 'uploaded',
+        error: 'error'
+    };
 
-    let loading = true;
-    let uploadSuccess = false;
-    
-    const urlSplit = $page.url.href.split('/');
-    const hostAndPort = urlSplit[0] + '//' + urlSplit[2] + '/';
-
+    let status = states.idle;
+    let gifStatus = '';
     let currentGif = null;
     let currentGiphyId = null;
-    let giphyResponse = null;
+    let currentMp4Url = null;
+    let errorMessage = '';
+    let unregisterGifCreator = null;
 
-    var _createGif = function(cb){
-        loading = true;
-        var r = $canvas.width / $canvas.height;
-        var gifw = 500;
-        var gifh = Math.round(gifw / r);
-        gifStatus = "Grabando el lienzo";
-        $p.saveFrames("out", "png", 5, 6, function(data) {
-            gifStatus = "Generando GIF";
-            var images = []
-            for (var i = 0; i < data.length; i++) {
-                images.push(data[i].imageData);
-            }
-            var settings = {
-                'images': images,
-                'gifWidth': gifw,
-                'gifHeight': gifh
-            };
-            createGIF(settings, function(gif) {
-                if(!gif.error) {
-                    console.log("Gif created successfuly");
-                    loading = false;
-                    currentGif = gif.image;
-                }else{
-                    console.log("Error creating gif");
-                }
+    $: loading = status === states.capturing || status === states.encoding || status === states.uploading;
+    $: hasPreview = Boolean(currentGif) && (status === states.preview || status === states.uploaded);
+    $: uploadSuccess = status === states.uploaded;
+    $: downloadUrl = uploadSuccess ? currentMp4Url : currentGif;
+    $: downloadLabel = uploadSuccess ? 'Descargar o compartir de Giphy' : 'Descargar GIF';
+
+    onMount(() => {
+        unregisterGifCreator = registerGifCreator(createGif);
+    });
+
+    onDestroy(() => {
+        unregisterGifCreator?.();
+    });
+
+    async function createGif() {
+        resetUploadState();
+        status = states.capturing;
+        gifStatus = 'Grabando el lienzo';
+
+        try {
+            const dimensions = getGifDimensions($canvas, GIF_DEFAULTS.width);
+            const frames = await captureCanvasFrames($p, {
+                seconds: GIF_DEFAULTS.seconds,
+                fps: GIF_DEFAULTS.fps
             });
-        });
+
+            status = states.encoding;
+            gifStatus = 'Generando GIF';
+            const dataUrl = await encodeGif(frames, dimensions);
+
+            currentGif = dataUrl;
+            status = states.preview;
+            gifStatus = '';
+        } catch (error) {
+            showError(error);
+        }
     }
 
-    // var uploadToServer = function(cb){
-    //     $.ajax({
-    //         type: "POST",
-    //         url: hostAndPort + 'files',
-    //         data: gif.currentGif,
-    //         success: function(data) {
-    //             console.log("Success uploading to server");
-    //             cb(data)
-    //         },
-    //         error: function(obj){
-    //             console.log("Error uploading to server");
-    //             cb(obj);
-    //         },
-    //         dataType: 'json'
-    //     });
-    // }
-    const uploadToServer = async () => {
+    const uploadToGiphy = async () => {
+        if (!currentGif || status === states.uploading) return;
+
         try {
-            const response = await fetch(hostAndPort + 'files', {
+            status = states.uploading;
+            gifStatus = 'Subiendo GIF a GIPHY';
+
+            const response = await fetch('/api/gifs/giphy', {
                 method: 'POST',
                 body: currentGif,
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'text/plain'
                 }
             });
 
+            const data = await response.json().catch(() => null);
             if (!response.ok) {
-                throw new Error('Network response was not ok');
+                throw new Error(data?.error || 'No se pudo subir el GIF');
             }
 
-            const data = await response.json();
-            console.log("Success uploading to server");
-            return data;
+            currentGiphyId = data.id;
+            currentMp4Url = data.mp4Url;
+            currentGif = data.gifUrl;
+            status = states.uploaded;
+            gifStatus = '';
         } catch (error) {
-            console.error("Error uploading to server", error);
-            throw error;
-        }
-    };
-
-    const uploadToGiphy = async () => {
-        try {
-            loading = true;
-            gifStatus = "Preparando GIF";
-            const serverData = await uploadToServer();
-            gifStatus = "Subiendo GIF a GIPHY";
-            // console.log("Subiendo a GIPHY");
-            const formData = new FormData();
-            formData.append('api_key', 'phMDT8Jy1QVT2ftqfB8XKbRoaG0RDT7K');
-            formData.append('username', 'trazosclub');
-            formData.append('source_image_url', hostAndPort + serverData.filename);
-            formData.append('tags', 'trazos,trazosclub,processing,collaborative,drawing,draw');
-
-            const response = await fetch('https://upload.giphy.com/v1/gifs', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-
-            giphyResponse = await response.json();
-            loading = false;
-            currentGiphyId = giphyResponse.data.id;
-            currentGif = "https://media.giphy.com/media/" + currentGiphyId + "/giphy.gif";
-            uploadSuccess=true;
-            // console.log("Success uploading to giphy");
-        } catch (error) {
-            loading=false;
-            gifStatus = "Algo salió mal subiendo el GIF, proba de nuevo!";
-            setTimeout(() => {
-                gifStatus = "";
-            }, 3000);
-            console.error("There was an error when uploading to Giphy", error);
+            showError(error);
         }
     };
 
     var copyLink = function () {
         if(currentGiphyId){
             gifStatus = "¡Copiado!";
-            navigator.clipboard.writeText("https://media.giphy.com/media/"+currentGiphyId+"/giphy.gif");
+            navigator.clipboard.writeText(currentGif);
             setTimeout(function(){
                 gifStatus = "";
             },1500)
@@ -143,13 +111,20 @@
 
     };
 
-    // var download = function () {
-    //     // $("#download").attr("href",);
-    // };
+    function resetUploadState() {
+        currentGif = null;
+        currentGiphyId = null;
+        currentMp4Url = null;
+        errorMessage = '';
+        gifStatus = '';
+    }
 
-
-
-    $gifStore.triggerCreateGif = _createGif;
+    function showError(error) {
+        status = states.error;
+        errorMessage = error?.message || 'Algo salió mal, proba de nuevo!';
+        gifStatus = errorMessage;
+        console.error('GIF error:', error);
+    }
 </script>
 
 <Dialog bind:open={showDialog}>
@@ -157,7 +132,7 @@
         <Content>
             <div class="gif-dialog">
                 <div class="giphy-header">
-                    <img src={GiphyLogo}/>
+                    <img src={GiphyLogo} alt="GIPHY"/>
                 </div>
                 <div class="trazos-spinner"></div>
                 <div class="gif-status">
@@ -165,27 +140,33 @@
                 </div>
             </div>
         </Content>
-    {:else}
+    {:else if hasPreview}
         <Content>
             <div class="gif-dialog">
                     <div class="giphy-header">
-                        <img src={GiphyLogo}/>
+                        <img src={GiphyLogo} alt="GIPHY"/>
                     </div>
                 <img src={currentGif}  alt="Generated Gif" class="gen-gif"/>
                 <div class="gif-actions">
                     {#if !uploadSuccess}
                         <div class="vertical-btn">
-                            <IconButton class="material-icons link" on:click={()=>{_createGif()}}>
+                            <IconButton class="material-icons link" on:click={createGif}>
                                 refresh
                             </IconButton>
                             <span>Generar de nuevo</span>
                         </div>
                         <div class="vertical-btn">
-                            <IconButton class="material-icons download" on:click={()=>{uploadToGiphy()}}>
+                            <IconButton class="material-icons download" on:click={uploadToGiphy} disabled={!currentGif}>
                                 upload
                             </IconButton>
                             <span>Subir a GIPHY y compartir</span>
-                        </div>            
+                        </div>
+                        <div class="vertical-btn">
+                            <IconButton class="material-icons download" target="_blank" href={downloadUrl} download="trazos.gif">
+                                download
+                            </IconButton>
+                            <span>{downloadLabel}</span>
+                        </div>
                     {:else}
                         <div class="vertical-btn">
                             <IconButton class="material-icons link" on:click={()=>{copyLink()}}>
@@ -194,15 +175,34 @@
                             <span>Copiar link</span>
                         </div>
                         <div class="vertical-btn">
-                            <IconButton class="material-icons download" target="_blank" href={"https://media.giphy.com/media/"+currentGiphyId+"/giphy.mp4"}>
+                            <IconButton class="material-icons download" target="_blank" href={downloadUrl}>
                                 download
                             </IconButton>
-                            <span>Descargar o compartir de Giphy</span>
+                            <span>{downloadLabel}</span>
                         </div>
                         
                     {/if}
                 </div>
             </div>  
+        </Content>
+    {:else}
+        <Content>
+            <div class="gif-dialog">
+                <div class="giphy-header">
+                    <img src={GiphyLogo} alt="GIPHY"/>
+                </div>
+                <div class="gif-status">
+                    {gifStatus || errorMessage || 'No se pudo generar el GIF'}
+                </div>
+                <div class="gif-actions">
+                    <div class="vertical-btn">
+                        <IconButton class="material-icons link" on:click={createGif}>
+                            refresh
+                        </IconButton>
+                        <span>Intentar de nuevo</span>
+                    </div>
+                </div>
+            </div>
         </Content>
     {/if}
     

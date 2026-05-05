@@ -4,25 +4,35 @@ import { Server } from 'socket.io'
 import { handler } from '../build/handler.js'
 import console from 'console'
 import uap from 'ua-parser-js'
-import textBody from 'body'
-import { v4 as uuidv4 } from 'uuid'
-import { mkdirp } from 'mkdirp'
-import { writeFile } from 'node:fs'
+import path from 'node:path'
 import { MongoClient } from 'mongodb'
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
+import { cleanupOldGifFiles, saveGifDataUrl } from './gif-utils.js'
 
 const scrypt = promisify(scryptCallback)
 
-const mongoActive = process.env.TRAZOS_MEMORY_ENABLED !== 'false'
+const memoryEnabled = parseBoolean(process.env.TRAZOS_MEMORY_ENABLED, true)
 const port = Number(process.env.PORT || 3000)
 const mongoUrl = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017'
 const dbName = process.env.MONGO_DB_NAME || 'mongo_trazos'
 const linesCollectionName = process.env.MONGO_LINES_COLLECTION || 'lines'
-const memoryTtlSeconds = Number(process.env.TRAZOS_MEMORY_TTL_SECONDS || 10800)
-const replayLimit = Number(process.env.TRAZOS_MEMORY_REPLAY_LIMIT || 0)
+const memoryTtlSeconds = Math.max(1, parseNumber(process.env.TRAZOS_MEMORY_TTL_SECONDS, 3 * 60 * 60))
+const replayLimit = Math.max(0, parseNumber(process.env.TRAZOS_MEMORY_REPLAY_LIMIT, 0))
 const adminSessionTtlSeconds = Number(process.env.ADMIN_SESSION_TTL_SECONDS || 86400)
 const adminCookieName = 'trazos_admin_session'
+const autoEraseDefaultMaxTrazos = 500
+const autoEraseMaxTrazosLimit = 10000
+const boardLayerCount = 4
+const gifUrlPrefix = '/user-img'
+const gifTempDir = path.resolve(process.env.GIF_TEMP_DIR || 'static/user-img')
+const gifMaxBytes = Math.max(1, parseNumber(process.env.GIF_MAX_BYTES, 12 * 1024 * 1024))
+const gifTempTtlMs = Math.max(1, parseNumber(process.env.GIF_TEMP_TTL_SECONDS, 30 * 60)) * 1000
+const gifCleanupIntervalMs = Math.max(1, parseNumber(process.env.GIF_CLEANUP_INTERVAL_SECONDS, 5 * 60)) * 1000
+const giphyApiKey = process.env.GIPHY_API_KEY || ''
+const giphyUsername = process.env.GIPHY_USERNAME || 'trazosclub'
+const giphyTags = process.env.GIPHY_TAGS || 'trazos,trazosclub,processing,collaborative,drawing,draw'
+const debugTrazosSocket = parseBoolean(process.env.DEBUG_TRAZOS_SOCKET, false)
 
 const app = express()
 const server = createServer(app)
@@ -41,21 +51,66 @@ let adminStateTimer = null
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
+app.use(gifUrlPrefix, express.static(gifTempDir, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '30m'
+}))
 
-app.post('/files', function(req, res) {
-    const extract = function (err, data) {
-        if (err) {
-            res.status(400).json({ error: 'invalid_body' })
-            return
-        }
-        if (!data) return
-        res.setHeader('Content-Type', 'application/json')
-        const filePath = saveImage(data)
-        res.send(JSON.stringify({ filename: filePath }))
-        console.log('Saved file: ' + filePath)
+app.post('/files', express.text({ type: '*/*', limit: gifMaxBytes }), async function(req, res) {
+    try {
+        const saved = await saveTemporaryGif(req.body)
+        res.json({ filename: saved.urlPath.replace(/^\//, ''), url: saved.urlPath })
+        console.log('Saved GIF: ' + saved.urlPath)
+    } catch (error) {
+        sendGifError(res, error)
+    }
+})
+
+app.post('/api/gifs/giphy', express.text({ type: '*/*', limit: gifMaxBytes }), async function(req, res) {
+    if (!giphyApiKey) {
+        res.status(503).json({ error: 'giphy_not_configured' })
+        return
     }
 
-    textBody(req, extract)
+    try {
+        const saved = await saveTemporaryGif(req.body)
+        const sourceImageUrl = `${getRequestBaseUrl(req)}${saved.urlPath}`
+        const formData = new FormData()
+        formData.append('api_key', giphyApiKey)
+        formData.append('username', giphyUsername)
+        formData.append('source_image_url', sourceImageUrl)
+        formData.append('tags', giphyTags)
+
+        const response = await fetch('https://upload.giphy.com/v1/gifs', {
+            method: 'POST',
+            body: formData
+        })
+
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.data?.id) {
+            console.error('GIPHY upload failed:', payload)
+            res.status(502).json({ error: 'giphy_upload_failed' })
+            return
+        }
+
+        const id = payload.data.id
+        res.json({
+            id,
+            gifUrl: `https://media.giphy.com/media/${id}/giphy.gif`,
+            mp4Url: `https://media.giphy.com/media/${id}/giphy.mp4`
+        })
+    } catch (error) {
+        sendGifError(res, error)
+    }
+})
+
+app.get('/api/boards/active', function(req, res) {
+    res.setHeader('Content-Type', 'application/json')
+    res.send(JSON.stringify({
+        boards: getActiveBoards(),
+        updatedAt: new Date().toISOString()
+    }))
 })
 
 app.get('/admin/api/session', async function(req, res) {
@@ -161,6 +216,32 @@ async function handleAdminConnection(socket) {
         }
     })
 
+    socket.on('admin:update-board-features', async function(data, callback) {
+        const boardId = String(data?.board || '').trim()
+        const board = boards.get(boardId)
+        if (!board) {
+            callback?.({ ok: false, error: 'board_not_found' })
+            return
+        }
+
+        const normalized = normalizeAutoEraseFeature(data?.features?.autoEraseOldTrazos)
+        if (!normalized) {
+            callback?.({ ok: false, error: 'invalid_auto_erase' })
+            return
+        }
+
+        board.features.autoEraseOldTrazos = normalized
+
+        try {
+            const pruned = await pruneBoardIfNeeded(board)
+            scheduleAdminState()
+            callback?.({ ok: true, pruned, features: cloneBoardFeatures(board.features) })
+        } catch (err) {
+            console.error(err)
+            callback?.({ ok: false, error: 'feature_update_failed' })
+        }
+    })
+
     socket.on('disconnect', function() {
         adminSockets.delete(socket)
     })
@@ -169,8 +250,10 @@ async function handleAdminConnection(socket) {
 function handleBoardConnection(socket) {
     let chatUser = false
     const roomId = String(socket.handshake.query?.room_id || 'default')
+    const requestedPrivateBoard = parseBoolean(socket.handshake.query?.private, false)
     const clientId = socket.id
-    const board = ensureBoard(roomId)
+    const boardExisted = boards.has(roomId)
+    const board = ensureBoard(roomId, requestedPrivateBoard)
     const parsedUa = uap(socket.request.headers['user-agent'])
     const user = {
         socketId: clientId,
@@ -187,27 +270,59 @@ function handleBoardConnection(socket) {
 
     socket.join(roomId)
     board.sockets.set(clientId, user)
+    board.lastActiveAt = new Date()
+    socket.joinAnnouncementSent = false
+    emitBoardSessionInfo(socket, board, boardExisted)
+    emitBoardPresence(board)
     scheduleAdminState()
 
     io.emit('connections', {
         connections: getOnlineUserCount()
     })
 
+    function setCanvasUsername(rawUsername) {
+        const normalizedUsername = normalizeUsername(rawUsername)
+        if (!normalizedUsername) return ''
+        socket.canvasUsername = normalizedUsername
+        user.username = normalizedUsername
+        return normalizedUsername
+    }
+
+    function announceBoardJoinIfNeeded(username) {
+        if (!username || socket.joinAnnouncementSent) return
+        socket.joinAnnouncementSent = true
+        socket.broadcast.to(roomId).emit('boardUserJoined', {
+            username,
+            onlineUsers: board.sockets.size
+        })
+    }
+
     socket.on('clientConnectionEvent', async function(data) {
         user.trazosId = data?.id == null ? null : String(data.id)
+        const normalizedUsername = setCanvasUsername(data?.username)
+        emitBoardPresence(board)
+        announceBoardJoinIfNeeded(normalizedUsername)
         scheduleAdminState()
 
-        if (mongoActive && db) {
-            const cursor = db.collection(linesCollectionName)
+        if (memoryReady()) {
+            let replayQuery = db.collection(linesCollectionName)
                 .find({ board: roomId })
+                .project({ _id: 0, data: 1, timestamp: 1 })
                 .sort({ timestamp: 1 })
 
-            if (replayLimit > 0) cursor.limit(replayLimit)
-            const boardLines = await cursor.toArray()
+            if (replayLimit > 0) replayQuery = replayQuery.limit(replayLimit)
+            const boardLines = await replayQuery.toArray()
             if (boardLines.length) {
                 socket.emit('previousLines', boardLines)
             }
         }
+    })
+
+    socket.on('setCanvasUsername', function(data) {
+        const normalizedUsername = setCanvasUsername(data?.username)
+        emitBoardPresence(board)
+        announceBoardJoinIfNeeded(normalizedUsername)
+        scheduleAdminState()
     })
 
     socket.on('new message', function (data) {
@@ -219,20 +334,23 @@ function handleBoardConnection(socket) {
 
     socket.on('add user', function (username) {
         if (chatUser) return
-        socket.username = username
-        user.username = username
+        socket.username = normalizeUsername(username)
+        if (!socket.username) return
+        const normalizedUsername = setCanvasUsername(socket.username)
         chatUser = true
+        board.chatUsernames.push(socket.username)
+        emitBoardPresence(board)
+        announceBoardJoinIfNeeded(normalizedUsername)
 
-        const usernames = getBoardUsernames(board)
         socket.emit('chat login', {
             username: socket.username,
-            numUsers: usernames.length,
-            usernames
+            numUsers: board.chatUsernames.length,
+            usernames: board.chatUsernames
         })
         socket.broadcast.to(roomId).emit('user joined', {
             username: socket.username,
-            numUsers: usernames.length,
-            usernames
+            numUsers: board.chatUsernames.length,
+            usernames: board.chatUsernames
         })
         scheduleAdminState()
     })
@@ -255,26 +373,35 @@ function handleBoardConnection(socket) {
         const layer = Number(data?.layer || 0)
         const trazosId = data?.id == null ? user.trazosId : String(data.id)
         if (trazosId && !user.trazosId) user.trazosId = trazosId
+        debugSocketEvent('receive', roomId, clientId, data)
 
         trackActiveStroke(board, event, trazosId, layer, clientId)
+        board.lastActiveAt = now
         board.lastEventAt = now
         user.lastEventAt = now
 
-        if (mongoActive && db) {
-            await db.collection(linesCollectionName).insertOne({
-                board: roomId,
-                id: data?.gesture_id,
-                data,
-                event,
-                layer,
-                trazosId,
-                socketId: clientId,
-                user: clientId,
-                timestamp: now
-            })
+        socket.broadcast.to(roomId).emit('externalMouseEvent', data)
+        debugSocketEvent('broadcast', roomId, clientId, data)
+
+        if (memoryReady()) {
+            try {
+                await db.collection(linesCollectionName).insertOne({
+                    board: roomId,
+                    id: data?.gesture_id,
+                    data,
+                    event,
+                    layer,
+                    trazosId,
+                    socketId: clientId,
+                    user: trazosId || clientId,
+                    timestamp: now
+                })
+                if (event === 'RELEASED') await pruneBoardIfNeeded(board)
+            } catch (err) {
+                console.error('Failed to persist board event:', err)
+            }
         }
 
-        socket.broadcast.to(roomId).emit('externalMouseEvent', data)
         user.rawEvents++
         scheduleAdminState()
     })
@@ -282,13 +409,15 @@ function handleBoardConnection(socket) {
     socket.on('deleteEvent', async function(data) {
         socket.broadcast.to(roomId).emit('deleteEvent', data)
 
-        if (mongoActive && db) {
+        if (memoryReady()) {
+            const strokeOwnerId = data?.id == null ? user.trazosId : String(data.id)
             await db.collection(linesCollectionName).deleteMany({
                 board: roomId,
                 layer: Number(data?.layer || 0),
                 $or: [
-                    { socketId: clientId },
-                    { user: clientId }
+                    { trazosId: strokeOwnerId },
+                    { user: strokeOwnerId },
+                    { 'data.id': strokeOwnerId }
                 ]
             })
         }
@@ -297,19 +426,26 @@ function handleBoardConnection(socket) {
 
     socket.on('disconnect', function() {
         if (chatUser) {
+            board.chatUsernames = board.chatUsernames.filter((name) => name !== socket.username)
             socket.broadcast.to(roomId).emit('chat logout', {
-                numUsers: Math.max(0, getBoardUsernames(board).length - 1),
-                usernames: getBoardUsernames(board).filter((name) => name !== socket.username)
+                numUsers: board.chatUsernames.length,
+                usernames: board.chatUsernames
             })
         }
 
+        const disconnectedTrazosId = user.trazosId
+        eraseDisconnectedUserTrazos(board, disconnectedTrazosId).catch((error) => {
+            console.error('Failed to erase disconnected user trazos:', error)
+        })
         clearSocketActiveStrokes(board, clientId)
         board.sockets.delete(clientId)
+        board.lastActiveAt = new Date()
+        emitBoardPresence(board)
         if (board.sockets.size < 1) {
-            boards.delete(roomId)
-            if (mongoActive && db) {
+            if (memoryReady()) {
                 db.collection(linesCollectionName).deleteMany({ board: roomId })
             }
+            boards.delete(roomId)
         }
 
         io.emit('user_disconnected', {
@@ -319,17 +455,66 @@ function handleBoardConnection(socket) {
     })
 }
 
-function ensureBoard(boardId) {
+function ensureBoard(boardId, isPrivate = false) {
     if (!boards.has(boardId)) {
+        const now = new Date()
         boards.set(boardId, {
             id: boardId,
-            createdAt: new Date(),
+            isPrivate,
+            createdAt: now,
+            lastActiveAt: now,
             lastEventAt: null,
             sockets: new Map(),
-            activeStrokes: new Map()
+            activeStrokes: new Map(),
+            chatUsernames: [],
+            features: defaultBoardFeatures()
         })
     }
     return boards.get(boardId)
+}
+
+function defaultBoardFeatures() {
+    return {
+        autoEraseOldTrazos: {
+            enabled: false,
+            maxTrazos: autoEraseDefaultMaxTrazos
+        }
+    }
+}
+
+function cloneBoardFeatures(features) {
+    return {
+        autoEraseOldTrazos: {
+            enabled: Boolean(features?.autoEraseOldTrazos?.enabled),
+            maxTrazos: Number(features?.autoEraseOldTrazos?.maxTrazos || autoEraseDefaultMaxTrazos)
+        }
+    }
+}
+
+function normalizeAutoEraseFeature(feature) {
+    if (!feature || typeof feature !== 'object') return null
+    const maxTrazos = Number(feature.maxTrazos)
+    if (!Number.isInteger(maxTrazos) || maxTrazos < 1 || maxTrazos > autoEraseMaxTrazosLimit) {
+        return null
+    }
+
+    return {
+        enabled: Boolean(feature.enabled),
+        maxTrazos
+    }
+}
+
+function getActiveBoards() {
+    return Array.from(boards.values())
+        .filter((board) => board && !board.isPrivate && board.sockets.size > 0)
+        .sort((a, b) => {
+            if (b.sockets.size !== a.sockets.size) return b.sockets.size - a.sockets.size
+            return String(b.lastActiveAt || '').localeCompare(String(a.lastActiveAt || ''))
+        })
+        .map((board) => ({
+            id: board.id,
+            connections: board.sockets.size
+        }))
 }
 
 function getOnlineUserCount() {
@@ -344,6 +529,24 @@ function getBoardUsernames(board) {
     return Array.from(board.sockets.values())
         .map((user) => user.username)
         .filter(Boolean)
+}
+
+function emitBoardPresence(board) {
+    io.to(board.id).emit('boardPresence', {
+        roomId: board.id,
+        onlineUsers: board.sockets.size,
+        users: getBoardUsernames(board)
+    })
+}
+
+function emitBoardSessionInfo(socket, board, boardExisted) {
+    socket.emit('boardSessionInfo', {
+        roomId: board.id,
+        onlineUsers: board.sockets.size,
+        joinedExistingBoard: boardExisted,
+        isPrivate: board.isPrivate,
+        users: getBoardUsernames(board)
+    })
 }
 
 function trackActiveStroke(board, event, trazosId, layer, socketId) {
@@ -363,6 +566,29 @@ function clearSocketActiveStrokes(board, socketId) {
             board.activeStrokes.delete(key)
         }
     }
+}
+
+async function eraseDisconnectedUserTrazos(board, trazosId) {
+    if (!board || !trazosId) return 0
+
+    emitDeleteForUser(board.id, trazosId)
+
+    for (const [key, stroke] of board.activeStrokes.entries()) {
+        if (stroke.trazosId === trazosId) board.activeStrokes.delete(key)
+    }
+
+    if (!memoryReady()) return 0
+
+    const result = await db.collection(linesCollectionName).deleteMany({
+        board: board.id,
+        $or: [
+            { trazosId },
+            { user: trazosId },
+            { 'data.id': trazosId }
+        ]
+    })
+
+    return result.deletedCount
 }
 
 async function buildAdminState() {
@@ -402,6 +628,7 @@ async function buildAdminState() {
             completedStrokes: boardStats.completed,
             rawEvents: boardStats.raw,
             layers: boardStats.layers,
+            features: cloneBoardFeatures(board.features),
             users
         }
     }).sort((a, b) => b.onlineUsers - a.onlineUsers || a.id.localeCompare(b.id))
@@ -554,6 +781,7 @@ async function eraseUser(board, trazosId) {
         board,
         $or: [
             { trazosId },
+            { user: trazosId },
             { 'data.id': trazosId }
         ]
     })
@@ -566,6 +794,58 @@ async function eraseUser(board, trazosId) {
         }
     }
     scheduleAdminState()
+    return result.deletedCount
+}
+
+async function pruneBoardIfNeeded(board) {
+    if (!memoryReady() || !board?.features?.autoEraseOldTrazos?.enabled) return 0
+
+    const maxTrazos = Number(board.features.autoEraseOldTrazos.maxTrazos)
+    if (!Number.isInteger(maxTrazos) || maxTrazos < 1) return 0
+
+    const rows = await db.collection(linesCollectionName).aggregate([
+        {
+            $match: {
+                board: board.id,
+                event: 'RELEASED'
+            }
+        },
+        {
+            $project: {
+                gestureId: { $ifNull: ['$id', '$data.gesture_id'] },
+                layer: { $ifNull: ['$layer', '$data.layer'] },
+                ownerId: { $ifNull: ['$trazosId', '$data.id'] },
+                timestamp: 1
+            }
+        },
+        {
+            $match: {
+                gestureId: { $nin: [null, ''] }
+            }
+        },
+        { $sort: { timestamp: -1 } },
+        { $skip: maxTrazos }
+    ]).toArray()
+
+    if (rows.length < 1) return 0
+
+    const staleGestureIds = rows.map((row) => row.gestureId)
+    const result = await db.collection(linesCollectionName).deleteMany({
+        board: board.id,
+        $or: [
+            { id: { $in: staleGestureIds } },
+            { 'data.gesture_id': { $in: staleGestureIds } }
+        ]
+    })
+
+    for (const row of rows) {
+        io.to(board.id).emit('deleteEvent', {
+            layer: Number(row.layer || 0),
+            id: String(row.ownerId || ''),
+            gesture_id: String(row.gestureId)
+        })
+    }
+
     return result.deletedCount
 }
 
@@ -602,6 +882,48 @@ function emitDeletePairs(board, pairs) {
     for (const pair of pairs) {
         io.to(board).emit('deleteEvent', pair)
     }
+}
+
+function emitDeleteForUser(board, trazosId) {
+    for (let layer = 0; layer < boardLayerCount; layer++) {
+        io.to(board).emit('deleteEvent', {
+            layer,
+            id: trazosId
+        })
+    }
+}
+
+function memoryReady() {
+    return memoryEnabled && db !== null
+}
+
+function parseBoolean(value, defaultValue) {
+    if (value == null) return defaultValue
+    return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase())
+}
+
+function parseNumber(value, defaultValue) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : defaultValue
+}
+
+function normalizeUsername(value) {
+    if (typeof value !== 'string') return ''
+    return value.trim().slice(0, 40)
+}
+
+function debugSocketEvent(action, roomId, socketId, data) {
+    if (!debugTrazosSocket) return
+    console.log('[trazos-socket]', action, {
+        roomId,
+        socketId,
+        event: data?.e,
+        id: data?.id,
+        gestureId: data?.gesture_id,
+        layer: data?.layer,
+        x: data?.x,
+        y: data?.y
+    })
 }
 
 function parseCookies(header = '') {
@@ -654,25 +976,43 @@ async function verifyPassword(password, passwordHash) {
     return timingSafeEqual(stored, derived)
 }
 
-function saveImage(rawData) {
-    const regex = /^data:.+\/(.+);base64,(.*)$/
-    const matches = rawData.match(regex)
-    const ext = matches[1]
-    const data = matches[2]
-    const buffer = Buffer.from(data, 'base64')
-    const publicDir = 'public'
-    const usrImgDir = 'user-img'
-    const pubUserImgDir = publicDir + '/' + usrImgDir
-    const filename = usrImgDir + '/' + uuidv4() + '.' + ext
-    mkdirp.sync(pubUserImgDir)
-    writeFile(publicDir + '/' + filename, buffer, function(err) {
-        if (err) throw err
+async function saveTemporaryGif(rawData) {
+    return saveGifDataUrl(rawData, {
+        directory: gifTempDir,
+        urlPrefix: gifUrlPrefix,
+        maxBytes: gifMaxBytes
     })
-    return filename
+}
+
+function sendGifError(res, error) {
+    const status = Number(error?.statusCode || error?.status || 500)
+    const safeStatus = status >= 400 && status < 600 ? status : 500
+    const message = safeStatus === 500 ? 'gif_processing_failed' : error.message
+    if (safeStatus === 500) console.error(error)
+    res.status(safeStatus).json({ error: message })
+}
+
+function getRequestBaseUrl(req) {
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
+    const proto = forwardedProto || req.protocol
+    return `${proto}://${req.get('host')}`
+}
+
+function scheduleGifCleanup() {
+    const runCleanup = async () => {
+        try {
+            await cleanupOldGifFiles(gifTempDir, gifTempTtlMs)
+        } catch (error) {
+            console.error('Failed to clean up temporary GIF files:', error)
+        }
+    }
+
+    runCleanup()
+    setInterval(runCleanup, gifCleanupIntervalMs).unref()
 }
 
 async function initDB() {
-    if (!mongoActive) return
+    if (!memoryEnabled) return
     mongoClient = new MongoClient(mongoUrl)
     await mongoClient.connect()
     db = mongoClient.db(dbName)
@@ -687,8 +1027,15 @@ async function initDB() {
     await ensureIndex(db.collection(linesCollectionName), { board: 1, timestamp: 1 }, {
         name: 'board_timestamp_idx'
     })
+    await ensureIndex(db.collection(linesCollectionName), { board: 1, user: 1, layer: 1 }, {
+        name: 'board_user_layer_idx'
+    })
     await ensureIndex(db.collection(linesCollectionName), { board: 1, trazosId: 1, layer: 1 }, {
         name: 'board_trazos_layer_idx'
+    })
+    await ensureIndex(db.collection(linesCollectionName), { timestamp: 1 }, {
+        name: 'timestamp_ttl_idx',
+        expireAfterSeconds: memoryTtlSeconds
     })
     console.log('Connected successfully to Mongo')
     console.log('Mongo running on: ' + mongoUrl)
@@ -708,17 +1055,23 @@ async function ensureIndex(collection, keys, options) {
     }
 }
 
-server.listen(port, async () => {
-    console.log('Running on *:' + port)
+async function startServer() {
+    scheduleGifCleanup()
 
-    if (mongoActive) {
-        await initDB()
-
-        const ttlMs = memoryTtlSeconds * 1000
-        await db.collection(linesCollectionName).deleteMany({ timestamp: { $lt: new Date(Date.now() - ttlMs) } })
-
-        setInterval(function () {
-            db.collection(linesCollectionName).deleteMany({ timestamp: { $lt: new Date(Date.now() - ttlMs) } })
-        }, 60 * 60 * 1000)
+    if (memoryEnabled) {
+        try {
+            await initDB()
+        } catch (error) {
+            console.error('Failed to initialize Mongo memory:', error)
+            process.exit(1)
+        }
+    } else {
+        console.log('Board memory disabled (TRAZOS_MEMORY_ENABLED=false)')
     }
-})
+
+    server.listen(port, () => {
+        console.log('Running on *:' + port)
+    })
+}
+
+startServer()

@@ -14,7 +14,7 @@
     <!-- -------- <br/> -->
     <!-- Lineas del resto: {otherGesturesPerFrame} <br/> -->
     <!-- -------- <br/> -->
-    <!-- Loaded gestures: {prevLines.length} <br/> -->
+    <!-- Loaded gestures: {replayQueue.length} <br/> -->
     <!-- -------- <br/> -->
     <!-- FPS: {Math.round(frameRate)} <br/>
     -------- <br/> -->
@@ -26,14 +26,18 @@
     import {StrokeGesture} from '$lib/andiamo/stroke';
     import {p, canvas, currentRibbon,currentGesture,prevGesture, canvasParams, layers, reset, openModals} from '$lib/stores/boardStore';
     import {id, socket, clientConnect} from '$lib/stores/socketStore';
+    import { loadCanvasUsername } from '$lib/stores/usernameStore';
     import MultiMap from '$lib/andiamo/multimap';
     import HashMap from '$lib/andiamo/hashmap';
     import {DELETE_FACTOR} from '$lib/andiamo/parameters';
 
+    const REPLAY_SPEED_MULTIPLIER = 2;
+    const REPLAY_MAX_GAP_MS = 120;
+    const REPLAY_MAX_EVENTS_PER_FRAME = 80;
+
     var _p5;
-    var loadingLines = false;
-    var prevLines = [];
-    var remainingLines = 0;
+    var replayQueue = [];
+    var replayStartAt = null;
     var otherRibbons = new HashMap();
     var gesturesPerFrame = 0;
     var myGesturesPerFrame = 0;
@@ -48,8 +52,27 @@
         new MultiMap()
     ];
 
+    function debugTrazosSocketEnabled(){
+        if (typeof window === 'undefined') return false;
+        return window.localStorage?.DEBUG_TRAZOS_SOCKET === 'true'
+            || new URLSearchParams(window.location.search).get('debugTrazosSocket') === '1';
+    }
+
+    function debugSocketEvent(action, data){
+        if (!debugTrazosSocketEnabled()) return;
+        console.log('[trazos-socket]', action, {
+            event: data?.e,
+            id: data?.id,
+            gestureId: data?.gesture_id,
+            layer: data?.layer,
+            x: data?.x,
+            y: data?.y
+        });
+    }
+
     onMount(() => {
-        clientConnect();
+        var storedUsername = loadCanvasUsername();
+        clientConnect(storedUsername);
         $socket.on('externalMouseEvent', externalMouseEvent);
         $socket.on('deleteEvent', deleteHandler);
         $socket.on("connect", () => {
@@ -67,10 +90,8 @@
         
         // Cargar lineas previas
         $socket.on('previousLines', async function(lines){
-            if(!loadingLines){
-                prevLines = lines
-                loadingLines = true;
-            }
+            replayQueue = buildReplayQueue(lines);
+            replayStartAt = null;
         });
     });
     onDestroy(()=>{
@@ -91,17 +112,10 @@
 		};
 
 		p5.draw = () => {
-			p5.background(0);
+            p5.background(0);
             otherGesturesCount = 0;
             myGestureCount = 0;
-            // Cargar lineas previas
-            if(prevLines.length > 0){
-                // console.log("mando1");
-                prevLines.splice(0,4).forEach((line)=>{
-                    // console.log("mando2");
-                    externalMouseEvent(line.data);
-                });
-            }
+            drainReplayQueue(p5);
             var t = p5.millis();
             // Iterar sobre las capas disponibles, empezando desde la ultima
             for (var i = $layers.length - 1; 0 <= i; i--) {
@@ -111,7 +125,8 @@
                     var gesture = other.values()[j];
                     gesture.update(t);
                     gesture.draw();
-                    if(!gesture.visible && !gesture.looping){
+                    if(!gesture.visible && !gesture.looping && gesture.remoteComplete !== false){
+                        otherRibbons.remove(gesture.gestureId || gesture.id);
                         other.remove(gesture.id);
                     }
                     otherGesturesCount++;
@@ -145,9 +160,57 @@
         p5.touchEnded = (event)=>gestureFinish(p5, event);
 	};
 
+    function parseEventTimestamp(timestamp){
+        if(!timestamp) return null;
+        var millis = new Date(timestamp).getTime();
+        if(Number.isFinite(millis)) return millis;
+        return null;
+    }
+
+    function buildReplayQueue(lines){
+        var queue = [];
+        var replayOffset = 0;
+        var prevTimestamp = null;
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            var currentTimestamp = parseEventTimestamp(line.timestamp);
+            if (prevTimestamp !== null && currentTimestamp !== null) {
+                var realGap = Math.max(0, currentTimestamp - prevTimestamp);
+                var cappedGap = Math.min(realGap, REPLAY_MAX_GAP_MS);
+                replayOffset += cappedGap / REPLAY_SPEED_MULTIPLIER;
+            } else if (i > 0) {
+                replayOffset += 1000 / 60;
+            }
+            queue.push({
+                at: replayOffset,
+                data: line.data
+            });
+            if (currentTimestamp !== null) prevTimestamp = currentTimestamp;
+        }
+        return queue;
+    }
+
+    function drainReplayQueue(p5){
+        if(!replayQueue.length) return;
+        if(replayStartAt === null) replayStartAt = p5.millis();
+        var elapsed = p5.millis() - replayStartAt;
+        var processed = 0;
+        while(
+            replayQueue.length &&
+            replayQueue[0].at <= elapsed &&
+            processed < REPLAY_MAX_EVENTS_PER_FRAME
+        ){
+            var item = replayQueue.shift();
+            externalMouseEvent(item.data);
+            processed++;
+        }
+    }
+
 
     // Parece que el dissapearing y el alpha se comparten con el board Y la velocidad tambien???
     function externalMouseEvent(data){
+        debugSocketEvent('receive', data);
+        var gestureKey = data.gesture_id || data.id;
         /*
         MOUSE PRESS
         */
@@ -162,17 +225,21 @@
 
             // Agregamos este gesture a la lista de gestures
             var newGesture = new StrokeGesture(_p5,$canvasParams.dissapearing, data.fixed, lastGesture, layer, $canvasParams.loopMultiplier);
+            newGesture.gestureId = gestureKey;
+            newGesture.ownerId = data.id;
+            newGesture.id = gestureKey;
+            newGesture.remoteComplete = false;
             newGesture.setStartTime(t0);
-            otherGestures[layer].put(data.id, newGesture);
+            otherGestures[layer].put(gestureKey, newGesture);
 
             // Agregamos un ribbon
             var newRibbon = new Ribbon(_p5);
             // Inicializamos el ribbon
             newRibbon.init(data.stroke_weight);
-            otherRibbons.put(data.id, newRibbon);
+            otherRibbons.put(gestureKey, newRibbon);
 
             // Le agregamos este punto
-            var other = otherGestures[layer].get(data.id);
+            var other = otherGestures[layer].get(gestureKey);
             newRibbon.addPoint(other[other.length-1], t0, data.color, $canvasParams.alpha, data.x, data.y);
         }
 
@@ -182,9 +249,13 @@
 
         if (data.e === "DRAGGED") {
             var layer = data.layer;
-            var other = otherGestures[layer].get(data.id);
+            var other = otherGestures[layer].get(gestureKey);
+            if(!other || !other.length) {
+                debugSocketEvent('ignore missing gesture for drag', data);
+                return;
+            }
             var otherGesture = other[other.length-1];
-            var otherRibbon = otherRibbons.get(data.id);
+            var otherRibbon = otherRibbons.get(gestureKey);
 
             // Agregamos el punto
             var t0 = otherGesture.getStartTime();
@@ -199,9 +270,13 @@
 
         if (data.e === "RELEASED") {
             var layer = data.layer;
-            var other = otherGestures[layer].get(data.id);
+            var other = otherGestures[layer].get(gestureKey);
+            if(!other || !other.length) {
+                debugSocketEvent('ignore missing gesture for release', data);
+                return;
+            }
             var otherGesture = other[other.length-1];
-            var otherRibbon = otherRibbons.get(data.id);
+            var otherRibbon = otherRibbons.get(gestureKey);
 
             // Seteamos el ultimo punto
             var t0 = otherGesture.getStartTime();
@@ -213,13 +288,32 @@
             // Seteamos el looping
             otherGesture.setLooping(data.looping);
             otherGesture.setEndTime(t1);
+            otherGesture.remoteComplete = true;
         }
     }
     
     function deleteHandler(data) {
-        var layer = data.layer;
+        var layer = normalizeLayer(data.layer);
         var deleteId = data.id;
-        fadeGestures(otherGestures[layer] ? otherGestures[layer].get(deleteId) : []);
+        var gestureId = data.gesture_id;
+
+        replayQueue = replayQueue.filter((item) => !replayEventMatchesDelete(item.data, data));
+
+        if(gestureId){
+            fadeGestures(otherGestures[layer] ? otherGestures[layer].get(gestureId) : []);
+            fadeGestures($layers[layer].filter((gesture) => gesture.gestureId == gestureId));
+            if($currentGesture && $currentGesture.gestureId == gestureId){
+                $currentGesture.looping = false;
+                $currentGesture.fadeOutFact = DELETE_FACTOR;
+            }
+            return;
+        }
+
+        fadeGestures(
+            otherGestures[layer]
+                ? otherGestures[layer].values().filter((gesture) => gesture.ownerId == deleteId)
+                : []
+        );
 
         if(deleteId == $id){
             fadeGestures($layers[layer]);
@@ -230,11 +324,27 @@
         }
     }
 
+    function normalizeLayer(layer) {
+        var normalized = Number(layer || 0);
+        return Number.isFinite(normalized) ? normalized : 0;
+    }
+
+    function replayEventMatchesDelete(eventData, deleteData) {
+        if(!eventData || !deleteData) return false;
+        if(deleteData.gesture_id){
+            return String(eventData.gesture_id || '') === String(deleteData.gesture_id);
+        }
+        if(deleteData.id == null) return false;
+        return String(eventData.id) === String(deleteData.id)
+            && normalizeLayer(eventData.layer) === normalizeLayer(deleteData.layer);
+    }
+
     function fadeGestures(gestures) {
         if(!gestures) return;
         for (var idx in gestures) {
             gestures[idx].looping = false;
             gestures[idx].fadeOutFact = DELETE_FACTOR;
+            gestures[idx].remoteComplete = true;
         }
     }
     
@@ -290,11 +400,12 @@
             'stroke_weight':$canvasParams.ribbonWidth,
             'layer': $canvasParams.layer,
             'fixed':$canvasParams.fixed,
-            // 'gesture_id': $currentGesture.gestureId,
+            'gesture_id': $currentGesture.gestureId,
             'id': $id
         }
 
         // Emitimos el evento a los demas clientes.
+        debugSocketEvent('emit', movement);
         $socket.emit("externalMouseEvent", movement);
 
         
@@ -314,9 +425,10 @@
                 'color': $canvasParams.color,
                 'stroke_weight':$canvasParams.ribbonWidth,
                 'layer': $canvasParams.layer,
-                // 'gesture_id': $currentGesture.gestureId,
+                'gesture_id': $currentGesture.gestureId,
                 'id': $id
             }
+            debugSocketEvent('emit', movement);
             $socket.emit("externalMouseEvent", movement);
 
             $currentRibbon.addPoint($currentGesture, t, $canvasParams.color, $canvasParams.alpha, p5.mouseX, p5.mouseY);
@@ -354,10 +466,11 @@
                 'stroke_weight':$canvasParams.ribbonWidth,
                 'layer': $canvasParams.layer,
                 'looping': $canvasParams.looping,
-                // 'gesture_id': $currentGesture.gestureId,
+                'gesture_id': $currentGesture.gestureId,
                 'id': $id
             }
             
+            debugSocketEvent('emit', movement);
             $socket.emit("externalMouseEvent", movement);
 
             $prevGesture = $currentGesture;

@@ -2,6 +2,11 @@
     import { onDestroy, onMount } from 'svelte';
     import { io } from 'socket.io-client';
 
+    const liveModeParams = [
+        { id: 'density', kind: 'range', min: 0.6, max: 1.4, step: 0.05, default: 1, label: 'Density' }
+    ];
+    const liveModeParamsJson = JSON.stringify(liveModeParams);
+
     let username = '';
     let password = '';
     let admin = null;
@@ -20,10 +25,17 @@
         boards: []
     };
     let selectedBoardId = '';
+    let featureBoardId = '';
+    let autoEraseEnabled = false;
+    let autoEraseMaxTrazos = 500;
+    let featureDirty = false;
+    let featureSaving = false;
 
     $: selectedBoard = selectedBoardId
         ? state.boards.find((board) => board.id === selectedBoardId) || null
         : null;
+
+    $: syncFeatureDraft(selectedBoard);
 
     onMount(async () => {
         await loadSession();
@@ -139,6 +151,81 @@
                 : 'No se pudo borrar el usuario';
         });
     }
+
+    function boardAutoEraseFeature(board) {
+        return board?.features?.autoEraseOldTrazos || { enabled: false, maxTrazos: 500 };
+    }
+
+    function syncFeatureDraft(board) {
+        if (!board) {
+            featureBoardId = '';
+            autoEraseEnabled = false;
+            autoEraseMaxTrazos = 500;
+            featureDirty = false;
+            featureSaving = false;
+            return;
+        }
+
+        const feature = boardAutoEraseFeature(board);
+        const incomingMax = Number(feature.maxTrazos || 500);
+        const shouldSync = board.id !== featureBoardId
+            || (!featureDirty && !featureSaving && (
+                autoEraseEnabled !== Boolean(feature.enabled)
+                || autoEraseMaxTrazos !== incomingMax
+            ));
+
+        if (!shouldSync) return;
+        featureBoardId = board.id;
+        autoEraseEnabled = Boolean(feature.enabled);
+        autoEraseMaxTrazos = incomingMax;
+        featureDirty = false;
+        featureSaving = false;
+    }
+
+    function updateAutoEraseEnabled(value) {
+        autoEraseEnabled = value;
+        featureDirty = true;
+    }
+
+    function updateAutoEraseMax(value) {
+        autoEraseMaxTrazos = value;
+        featureDirty = true;
+    }
+
+    function saveBoardFeatures(board) {
+        if (!socket || !board || featureSaving) return;
+
+        let maxTrazos = Number(autoEraseMaxTrazos);
+        if (autoEraseEnabled && (!Number.isInteger(maxTrazos) || maxTrazos < 1 || maxTrazos > 10000)) {
+            actionMessage = 'El máximo de trazos debe estar entre 1 y 10000';
+            return;
+        }
+        if (!autoEraseEnabled && (!Number.isInteger(maxTrazos) || maxTrazos < 1 || maxTrazos > 10000)) {
+            maxTrazos = 500;
+        }
+
+        featureSaving = true;
+        actionMessage = 'Guardando funciones del tablero...';
+        socket.emit('admin:update-board-features', {
+            board: board.id,
+            features: {
+                autoEraseOldTrazos: {
+                    enabled: autoEraseEnabled,
+                    maxTrazos
+                }
+            }
+        }, (result) => {
+            featureSaving = false;
+            if (result?.ok) {
+                featureDirty = false;
+                actionMessage = result.pruned
+                    ? `Funciones guardadas. Se borraron ${formatNumber(result.pruned)} eventos antiguos.`
+                    : 'Funciones guardadas.';
+                return;
+            }
+            actionMessage = 'No se pudieron guardar las funciones del tablero';
+        });
+    }
 </script>
 
 <svelte:head>
@@ -146,11 +233,11 @@
 </svelte:head>
 
 {#if loading}
-    <main class="admin-shell">
+    <main class="admin-shell" data-live-mode-params={liveModeParamsJson}>
         <p class="muted">Cargando...</p>
     </main>
 {:else if !admin}
-    <main class="login-shell">
+    <main class="login-shell" data-live-mode-params={liveModeParamsJson}>
         <form class="login-panel" on:submit|preventDefault={login}>
             <div>
                 <p class="eyebrow">Administración de Trazos</p>
@@ -169,7 +256,7 @@
         </form>
     </main>
 {:else}
-    <main class="admin-shell">
+    <main class="admin-shell" data-live-mode-params={liveModeParamsJson}>
         <header class="admin-header">
             <div>
                 <p class="eyebrow">Administración de Trazos</p>
@@ -195,7 +282,7 @@
 
         <section class="workbench">
             <h2 class="section-title">Tableros online ({formatNumber(state.boards.length)})</h2>
-            <div class="panel">
+            <div class="panel board-panel">
                 <div class="table boards">
                     <div class="row head">
                         <span>Tablero</span>
@@ -231,65 +318,127 @@
             {#if selectedBoard}
                 <h2 class="section-title detail-title">Detalle de tablero</h2>
                 <div class="panel detail">
-                    <div class="detail-summary">
-                        <div class="detail-main">
-                            <p class="detail-label">Tablero</p>
-                            <h2>{selectedBoard.id}</h2>
-                        </div>
-                        <div class="detail-meta">
-                            <div>
-                                <span>Creado</span>
-                                <strong>{formatDate(selectedBoard.createdAt)}</strong>
-                            </div>
-                            <div>
-                                <span>Último evento</span>
-                                <strong>{formatDate(selectedBoard.lastEventAt)}</strong>
-                            </div>
-                        </div>
-                        <div class="detail-layer-block">
-                            <p class="detail-label">Trazos por capa</p>
-                            <div class="layers" aria-label="Trazos por capa">
-                                {#each selectedBoard.layers as count, index}
-                                    <span class="layer-chip"><b>Capa {index + 1}</b>{formatNumber(count)}</span>
-                                {/each}
-                            </div>
-                        </div>
-                        <div class="panel-actions">
-                            <button class="ghost" on:click={() => selectedBoardId = ''}>Cerrar</button>
-                            <button class="danger" on:click={() => eraseBoard(selectedBoard)}>Borrar tablero</button>
-                        </div>
-                    </div>
+                    <button
+                        type="button"
+                        class="ghost icon-close"
+                        aria-label="Cerrar detalle"
+                        on:click={() => selectedBoardId = ''}
+                    >
+                        ×
+                    </button>
 
-                    <div class="table users">
-                        <div class="row head">
-                            <span>Usuario</span>
-                            <span>Sistema</span>
-                            <span>Activo</span>
-                            <span>Trazos</span>
-                            <span>Eventos</span>
-                            <span>Último evento</span>
-                            <span>Capas</span>
-                            <span></span>
-                        </div>
-                        {#each selectedBoard.users as user}
-                            <div class="row user-row">
-                                <span title={user.socketId}>{user.displayName}</span>
-                                <span>{user.ua}</span>
-                                <span>{user.activeStroke ? 'sí' : 'no'}</span>
-                                <span>{formatNumber(user.completedStrokes)}</span>
-                                <span>{formatNumber(user.rawEvents)}</span>
-                                <span>{formatDate(user.lastEventAt)}</span>
-                                <span class="layers compact">
-                                    {#each user.layers as count, index}
-                                        <span class="layer-chip"><b>C{index + 1}</b>{formatNumber(count)}</span>
-                                    {/each}
-                                </span>
-                                <span><button class="danger ghost" on:click={() => eraseUser(selectedBoard, user)}>Borrar</button></span>
+                    <section class="detail-section">
+                        <h3 class="subsection-title">Información</h3>
+                        <div class="detail-summary">
+                            <div class="detail-heading">
+                                <div class="detail-main">
+                                    <p class="detail-label">Tablero</p>
+                                    <h2>{selectedBoard.id}</h2>
+                                </div>
                             </div>
-                        {:else}
-                            <p class="empty">Sin usuarios conectados.</p>
-                        {/each}
-                    </div>
+                            <div class="detail-meta">
+                                <div>
+                                    <span>Creado</span>
+                                    <strong>{formatDate(selectedBoard.createdAt)}</strong>
+                                </div>
+                                <div>
+                                    <span>Último evento</span>
+                                    <strong>{formatDate(selectedBoard.lastEventAt)}</strong>
+                                </div>
+                            </div>
+                            <div class="detail-layer-block">
+                                <p class="detail-label">Trazos por capa</p>
+                                <div class="layers" aria-label="Trazos por capa">
+                                    {#each selectedBoard.layers as count, index}
+                                        <span class="layer-chip"><b>Capa {index + 1}</b>{formatNumber(count)}</span>
+                                    {/each}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="detail-section">
+                        <h3 class="subsection-title">Configuración</h3>
+                        <div class="feature-panel">
+                            <div class="sub-panel">
+                                <p class="detail-label">Funciones</p>
+                                <h4>Borrar trazos antiguos automáticamente</h4>
+                                <label class="switch-row">
+                                    <span class="switch-control">
+                                        <input
+                                            type="checkbox"
+                                            role="switch"
+                                            aria-label="Borrar trazos antiguos automáticamente"
+                                            checked={autoEraseEnabled}
+                                            on:change={(event) => updateAutoEraseEnabled(event.currentTarget.checked)}
+                                        />
+                                        <span class="switch-track" aria-hidden="true"></span>
+                                    </span>
+                                    <span>{autoEraseEnabled ? 'Activado' : 'Desactivado'}</span>
+                                </label>
+                                <label class:disabled={!autoEraseEnabled} class="feature-field">
+                                    Máximo de trazos
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="10000"
+                                        step="1"
+                                        value={autoEraseMaxTrazos}
+                                        disabled={!autoEraseEnabled}
+                                        on:input={(event) => updateAutoEraseMax(event.currentTarget.valueAsNumber)}
+                                    />
+                                </label>
+                                <div class="panel-actions">
+                                    <button
+                                        type="button"
+                                        disabled={!featureDirty || featureSaving}
+                                        on:click={() => saveBoardFeatures(selectedBoard)}
+                                    >
+                                        {featureSaving ? 'Guardando...' : 'Guardar'}
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="sub-panel actions">
+                                <p class="detail-label">Acciones</p>
+                                <h4>Borrar todos los trazos del tablero ahora</h4>
+                                <button class="danger" on:click={() => eraseBoard(selectedBoard)}>Limpiar tablero</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="detail-section">
+                        <h3 class="subsection-title">Active users</h3>
+                        <div class="table users">
+                            <div class="row head">
+                                <span>Usuario</span>
+                                <span>Sistema</span>
+                                <span>Activo</span>
+                                <span>Trazos</span>
+                                <span>Eventos</span>
+                                <span>Último evento</span>
+                                <span>Capas</span>
+                                <span></span>
+                            </div>
+                            {#each selectedBoard.users as user}
+                                <div class="row user-row">
+                                    <span title={user.socketId}>{user.displayName}</span>
+                                    <span>{user.ua}</span>
+                                    <span>{user.activeStroke ? 'sí' : 'no'}</span>
+                                    <span>{formatNumber(user.completedStrokes)}</span>
+                                    <span>{formatNumber(user.rawEvents)}</span>
+                                    <span>{formatDate(user.lastEventAt)}</span>
+                                    <span class="layers compact">
+                                        {#each user.layers as count, index}
+                                            <span class="layer-chip"><b>C{index + 1}</b>{formatNumber(count)}</span>
+                                        {/each}
+                                    </span>
+                                    <span><button class="danger ghost" on:click={() => eraseUser(selectedBoard, user)}>Borrar</button></span>
+                                </div>
+                            {:else}
+                                <p class="empty">Sin usuarios conectados.</p>
+                            {/each}
+                        </div>
+                    </section>
                 </div>
             {/if}
         </section>
@@ -317,6 +466,26 @@
         font-family: "Roboto Mono", monospace;
     }
 
+    .login-shell,
+    .admin-shell {
+        --space-2xs: calc(var(--p-density, 1) * 4px);
+        --space-xs: calc(var(--p-density, 1) * 8px);
+        --space-sm: calc(var(--p-density, 1) * 12px);
+        --space-md: calc(var(--p-density, 1) * 16px);
+        --space-lg: calc(var(--p-density, 1) * 24px);
+        --space-xl: calc(var(--p-density, 1) * 32px);
+        --space-2xl: calc(var(--p-density, 1) * 48px);
+        --shell-gutter: clamp(var(--space-md), 4vw, var(--space-xl));
+        --panel-padding: clamp(var(--space-sm), 2vw, var(--space-lg));
+        --table-row-height: max(34px, calc(var(--p-density, 1) * 38px));
+        --touch-target: 44px;
+        --col-2xs: max(62px, calc(var(--p-density, 1) * 62px));
+        --col-xs: max(70px, calc(var(--p-density, 1) * 70px));
+        --col-sm: max(76px, calc(var(--p-density, 1) * 76px));
+        --col-md: max(82px, calc(var(--p-density, 1) * 82px));
+        --col-lg: max(86px, calc(var(--p-density, 1) * 86px));
+    }
+
     button,
     input {
         font: inherit;
@@ -329,8 +498,14 @@
         color: var(--md-on-primary);
         cursor: pointer;
         min-height: 34px;
-        padding: 0 12px;
+        padding: 0 var(--space-sm);
         transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    }
+
+    button:disabled {
+        cursor: not-allowed;
+        filter: grayscale(.6) brightness(.7);
+        opacity: .7;
     }
 
     button.ghost {
@@ -361,6 +536,11 @@
         outline-offset: 2px;
     }
 
+    .switch-control input:focus-visible + .switch-track {
+        outline: 2px solid var(--md-primary);
+        outline-offset: 2px;
+    }
+
     .login-shell,
     .admin-shell {
         min-height: 100vh;
@@ -370,16 +550,16 @@
     .login-shell {
         display: grid;
         place-items: center;
-        padding: 24px;
+        padding: var(--shell-gutter);
     }
 
     .login-panel {
         width: min(360px, 100%);
         border-radius: 8px;
         background: var(--md-surface-container);
-        padding: 24px;
+        padding: var(--space-lg);
         display: grid;
-        gap: 16px;
+        gap: var(--space-md);
     }
 
     .login-panel h1,
@@ -391,7 +571,7 @@
 
     .login-panel label {
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
         color: var(--md-on-surface-variant);
         font-size: 13px;
     }
@@ -402,13 +582,13 @@
         background: var(--md-surface);
         color: var(--md-on-surface);
         min-height: 36px;
-        padding: 0 10px;
+        padding: 0 var(--space-sm);
     }
 
     .admin-shell {
-        width: min(1080px, calc(100% - 32px));
+        width: min(1180px, calc(100% - (var(--shell-gutter) * 2)));
         margin: 0 auto;
-        padding: 24px 0;
+        padding: var(--space-lg) 0 var(--space-2xl);
     }
 
     .admin-header,
@@ -416,7 +596,11 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: var(--space-sm);
+    }
+
+    .admin-header {
+        padding-bottom: var(--space-xs);
     }
 
     .eyebrow,
@@ -432,7 +616,7 @@
         color: var(--md-primary);
         text-transform: uppercase;
         letter-spacing: .08em;
-        margin-bottom: 6px;
+        margin-bottom: var(--space-2xs);
     }
 
     .error {
@@ -442,15 +626,16 @@
     }
 
     .notice {
-        margin-top: 12px;
+        margin-top: var(--space-xs);
+        padding: var(--space-xs) 0;
         color: var(--md-primary);
     }
 
     .metrics {
         display: grid;
-        grid-template-columns: repeat(5, minmax(120px, 1fr));
-        gap: 8px;
-        margin: 18px 0;
+        grid-template-columns: repeat(auto-fit, minmax(max(calc(var(--p-density, 1) * 128px), 120px), 1fr));
+        gap: var(--space-xs);
+        margin: var(--space-sm) 0 var(--space-xl);
     }
 
     .metrics div,
@@ -460,9 +645,9 @@
 
     .metrics div {
         border-radius: 8px;
-        padding: 12px;
+        padding: var(--space-sm);
         display: grid;
-        gap: 4px;
+        gap: var(--space-2xs);
     }
 
     .metrics strong {
@@ -478,7 +663,7 @@
 
     .workbench {
         display: grid;
-        gap: 10px;
+        gap: var(--space-sm);
         align-items: start;
     }
 
@@ -489,29 +674,78 @@
     }
 
     .detail-title {
-        margin-top: 12px;
+        margin-top: var(--space-xl);
     }
 
     .panel {
         min-width: 0;
         border-radius: 8px;
-        padding: 12px;
+        padding: var(--panel-padding);
+    }
+
+    .board-panel {
+        padding-block: var(--space-sm);
     }
 
     .detail {
-        padding: 20px;
+        container-type: inline-size;
+        padding: var(--space-lg);
+        position: relative;
+    }
+
+    .icon-close {
+        position: absolute;
+        top: var(--space-sm);
+        right: var(--space-sm);
+        width: 34px;
+        min-height: 34px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+        font-size: 24px;
+        line-height: 1;
+    }
+
+    .detail-section {
+        display: grid;
+        gap: var(--space-sm);
+        padding-top: var(--space-lg);
+    }
+
+    .detail-section:first-of-type {
+        padding-top: 0;
+        padding-right: calc(34px + var(--space-md));
+    }
+
+    .detail-section + .detail-section {
+        border-top: 1px solid var(--md-outline-variant);
+        margin-top: var(--space-lg);
+    }
+
+    .subsection-title {
+        margin: 0;
+        color: var(--md-primary);
+        font-size: 15px;
+        line-height: 1.2;
     }
 
     .detail-summary {
         display: grid;
-        grid-template-columns: minmax(180px, .7fr) minmax(260px, 1fr) minmax(260px, 1fr) auto;
-        gap: 20px;
+        grid-template-columns: minmax(260px, .8fr) minmax(calc(var(--p-density, 1) * 260px), 1fr) minmax(calc(var(--p-density, 1) * 240px), 1fr);
+        gap: var(--space-lg);
         align-items: start;
     }
 
+    .detail-heading {
+        display: grid;
+        gap: var(--space-md);
+        min-width: 0;
+    }
+
     .detail-main h2 {
-        margin: 4px 0 0;
+        margin: var(--space-2xs) 0 0;
         line-height: 1.1;
+        overflow-wrap: anywhere;
     }
 
     .detail-label {
@@ -525,15 +759,14 @@
     .detail-meta {
         display: grid;
         grid-template-columns: repeat(2, minmax(120px, 1fr));
-        gap: 10px;
+        gap: var(--space-sm);
     }
 
     .detail-meta div {
-        border-radius: 8px;
-        background: var(--md-surface-container-high);
-        padding: 12px;
+        border-left: 1px solid var(--md-outline-variant);
+        padding-left: var(--space-sm);
         display: grid;
-        gap: 6px;
+        gap: var(--space-xs);
     }
 
     .detail-meta span {
@@ -554,28 +787,134 @@
         min-width: 0;
     }
 
+    .feature-panel {
+        display: grid;
+        gap: var(--space-sm);
+        align-items: start;
+    }
+
+    .sub-panel {
+        border-radius: 8px;
+        background: var(--md-surface-container-high);
+        display: grid;
+        gap: var(--space-sm);
+        align-content: start;
+        padding: var(--space-md);
+    }
+
+    .sub-panel.actions {
+        justify-items: start;
+    }
+
+    .feature-panel h4 {
+        margin: var(--space-2xs) 0 0;
+        font-size: 16px;
+        line-height: 1.2;
+    }
+
+    .switch-row,
+    .feature-field {
+        color: var(--md-on-surface-variant);
+        font-size: 12px;
+    }
+
+    .switch-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+        min-height: var(--touch-target);
+    }
+
+    .switch-control {
+        position: relative;
+        display: inline-flex;
+        width: 44px;
+        height: 26px;
+        flex: 0 0 auto;
+    }
+
+    .switch-control input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        cursor: pointer;
+        opacity: 0;
+    }
+
+    .switch-track {
+        width: 100%;
+        height: 100%;
+        border: 1px solid var(--md-outline);
+        border-radius: 999px;
+        background: var(--md-surface);
+        pointer-events: none;
+        transition: background-color 120ms ease, border-color 120ms ease;
+    }
+
+    .switch-track::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: var(--md-on-surface-variant);
+        transition: transform 120ms ease, background-color 120ms ease;
+    }
+
+    .switch-control input:checked + .switch-track {
+        border-color: var(--md-primary);
+        background: color-mix(in srgb, var(--md-primary) 24%, transparent);
+    }
+
+    .switch-control input:checked + .switch-track::after {
+        transform: translateX(18px);
+        background: var(--md-primary);
+    }
+
+    .feature-field {
+        display: grid;
+        gap: var(--space-xs);
+    }
+
+    .feature-field.disabled {
+        opacity: .52;
+    }
+
+    .feature-field input {
+        border: 1px solid var(--md-outline);
+        border-radius: 6px;
+        background: var(--md-surface);
+        color: var(--md-on-surface);
+        min-height: 34px;
+        padding: 0 var(--space-sm);
+        width: max(calc(var(--p-density, 1) * 130px), 112px);
+    }
+
+    .feature-field input:disabled {
+        color: var(--md-on-surface-variant);
+    }
+
     .panel-actions {
         display: flex;
-        gap: 8px;
+        gap: var(--space-xs);
         flex-wrap: wrap;
-        justify-content: flex-end;
+        justify-content: flex-start;
     }
 
     .table {
-        margin-top: 12px;
         overflow: auto;
-    }
-
-    .detail .table {
-        margin-top: 20px;
     }
 
     .row {
         display: grid;
         align-items: center;
-        gap: 10px;
+        gap: var(--space-sm);
         min-width: 0;
-        min-height: 34px;
+        min-height: var(--table-row-height);
         border-top: 1px solid var(--md-outline-variant);
         color: var(--md-on-surface);
         text-align: left;
@@ -597,7 +936,7 @@
     }
 
     .boards .row {
-        grid-template-columns: minmax(110px, 1fr) 72px 86px 80px 82px minmax(128px, 1fr) minmax(128px, 1fr);
+        grid-template-columns: minmax(calc(var(--p-density, 1) * 128px), 1fr) var(--col-sm) var(--col-lg) var(--col-md) var(--col-md) minmax(calc(var(--p-density, 1) * 132px), 1fr) minmax(calc(var(--p-density, 1) * 132px), 1fr);
     }
 
     .board-row {
@@ -608,8 +947,8 @@
         border-color: var(--md-outline-variant);
         border-radius: 0;
         color: var(--md-on-surface);
-        min-height: 38px;
-        padding: 0 8px;
+        min-height: max(var(--touch-target), var(--table-row-height));
+        padding: 0 var(--space-xs);
     }
 
     .board-row.selected,
@@ -619,19 +958,19 @@
     }
 
     .users .row {
-        grid-template-columns: minmax(120px, 1fr) minmax(90px, .7fr) 62px 70px 82px minmax(132px, 1fr) minmax(190px, 1fr) 76px;
+        grid-template-columns: minmax(calc(var(--p-density, 1) * 128px), 1fr) minmax(calc(var(--p-density, 1) * 104px), .75fr) var(--col-2xs) var(--col-xs) var(--col-md) minmax(calc(var(--p-density, 1) * 132px), 1fr) minmax(calc(var(--p-density, 1) * 190px), 1fr) var(--col-sm);
     }
 
     .layers {
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
+        gap: var(--space-xs);
+        margin-top: var(--space-xs);
     }
 
     .layers.compact {
         margin-top: 0;
-        gap: 4px;
+        gap: var(--space-2xs);
     }
 
     .row span.layers {
@@ -642,11 +981,11 @@
     .layer-chip {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: var(--space-xs);
         border-radius: 999px;
         background: var(--md-surface-container-high);
         color: var(--md-on-surface);
-        padding: 4px 8px;
+        padding: var(--space-2xs) var(--space-xs);
         font-size: 12px;
         line-height: 1;
         white-space: nowrap;
@@ -662,23 +1001,40 @@
         font-weight: 700;
     }
 
-    @media (max-width: 940px) {
-        .metrics,
-        .workbench {
+    @container (max-width: 760px) {
+        .detail-summary,
+        .feature-panel {
             grid-template-columns: 1fr;
         }
 
-        .detail-summary,
         .detail-meta {
             grid-template-columns: 1fr;
         }
+    }
 
-        .detail {
-            padding: 16px;
+    @media (max-width: 940px) {
+        .admin-header,
+        .session {
+            align-items: flex-start;
+        }
+
+        .admin-header {
+            flex-direction: column;
         }
 
         .detail {
-            padding: 16px;
+            padding: var(--space-md);
+        }
+    }
+
+    @media (max-width: 620px) {
+        .detail {
+            padding: var(--space-sm);
+        }
+
+        .feature-panel button,
+        .login-panel button {
+            width: 100%;
         }
     }
 </style>

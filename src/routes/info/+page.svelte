@@ -1,564 +1,569 @@
-
 <script>
-    import logo from '$lib/images/logo.png';
-    import deDondeVenimos from '$lib/images/de-donde-venimos.png';
-    import aDondeVamos from '$lib/images/a-donde-vamos.png';
-    import { goto } from '$app/navigation';
-    import logoAndiamo from '$lib/images/logo-andiamo.png';
+  import '$lib/styles/trazos-theme.css';
+  import SiteNav from '$lib/components/SiteNav.svelte';
+  import { copy } from '$lib/i18n/copy';
+  import { languageStore } from '$lib/stores/languageStore';
+  import logo from '$lib/images/logo.png';
+  import marcelaAvatar from '$lib/images/team/marcela-avatar.jpeg';
+  import andresAvatar from '$lib/images/team/andres-avatar.jpeg';
+  import gastonAvatar from '$lib/images/team/gaston-avatar.jpeg';
+  import deDondeVenimos from '$lib/images/de-donde-venimos.png';
+  import aDondeVamos from '$lib/images/a-donde-vamos.png';
 
-    function scrollIntoView({ target }) {
-		const el = document.querySelector(target.getAttribute('href'));
-		if (!el) return;
-        el.scrollIntoView({
-            behavior: 'smooth'
-        });
+  const pageCopy = {
+    es: {
+      intro: {
+        navTeam: 'Quienes somos',
+        navOrigin: 'De donde venimos',
+        navLinks: 'Enlaces y descargas',
+        paragraphs: [
+          'Trazos Club es un proyecto de creacion de tecnologias de software libre, practicas artisticas, educativas y experiencias ludicas.',
+          'Desde una perspectiva abierta y colaborativa, el proyecto articula desarrollo tecnologico, creacion artistica y un proyecto pedagogico construido a lo largo de anos de investigacion y practica en torno al dibujo colectivo y la animacion en tiempo real.'
+        ],
+        contactCta: 'Contactanos'
+      },
+      team: {
+        heading: 'Equipo Trazos',
+        introLead: 'Somos el Equipo Trazos, formado por',
+        conjunction: 'y',
+        introTail:
+          'coordina el proyecto, mientras que el equipo desarrolla de manera colaborativa las distintas areas de trabajo.',
+        paragraph2:
+          'Desarrollamos tecnologias creativas basadas en el dibujo en vivo, colectivo y animado en tiempo real. Somos responsables del desarrollo del software libre Andiamo y de la plataforma Trazos Club.',
+        paragraph3Lead: 'Un miembro fundacional del proyecto es',
+        paragraph3:
+          'quien diseno la identidad visual, el logo, participo en los primeros pasos y acompana ahora satelitalmente. Participaron tambien Leandro Garber, Leslie Watkins y Nahuel Coppero en los primeros desarrollos de programacion. Actualmente se sumo como colaboradora Jenn Jones desde el diseno.',
+        paragraph4:
+          'En distintas etapas acompanaron y apoyaron al proyecto Damian del Valle, Gabriel Gendin, Bianca Racioppe, Nahuel Canada, Ana Laura Califa, Paola Corona, Myriam Beutelspacher, Lau Castro, la Universidad Nacional de las Artes y el Club Cultural Matienzo.'
+      },
+      origin: {
+        title: 'De donde venimos',
+        paragraphs: [
+          'El proyecto surge del trabajo conjunto de Andres Colubri y Marcela Rapallo desde el ano 2007, desarrollando tecnologias libres para dibujo en vivo y obras teatrales y performaticas con las plataformas Moldeo y Andiamo. Tambien se nutre del trabajo de Andres Colubri en el desarrollo de Processing y de los proyectos pedagogicos de Marcela Rapallo centrados en el dibujo en escena y el dibujo colectivo.',
+          'La plataforma Trazos Club nacio en 2016, respondiendo a la necesidad de generar una solucion tecnologica de colaboracion en tiempo real, utilizando los estandares de la web disponibles en ese momento.',
+          'El proyecto forma parte del equipo de investigacion Dibujo Abierto de la Universidad Nacional de las Artes (Argentina), con la participacion de un equipo interdisciplinario de estudiantes y docentes. El primer prototipo fue realizado gracias a su seleccion en el Programa Universidad, Diseno y Desarrollo Productivo del Ministerio de Educacion de la Nacion.',
+          'Gran parte de este recorrido se construyo en contextos comunitarios, sociales y territoriales, especialmente en el marco de la educacion publica en Argentina.'
+        ]
+      },
+      future: {
+        title: 'A donde vamos',
+        paragraphs: [
+          'Trazos Club se encuentra actualmente gestando una nueva etapa, en una escala mayor. La plataforma trazos.club, tal como se presenta hoy, es una semilla de ese proyecto: una forma inicial que crecio a partir de raices profundas, construidas a lo largo de muchos anos de trabajo colectivo.',
+          'Estas raices se formaron en el tiempo, tanto durante el proceso de creacion del proyecto como a lo largo de mas de diez anos de existencia de la plataforma, a traves de una comunidad amplia y diversa, y de innumerables encuentros, talleres, eventos y experiencias de dibujo colectivo.',
+          'Hoy, la plataforma es el punto de partida de un proyecto mas grande, que sigue creciendo a partir de esa comunidad y que busca tomar la forma de un Club de dibujo: un espacio de encuentro, experimentacion y creacion compartida, centrado en el dibujo colectivo animado en vivo. La semilla ya esta en marcha y se encuentra a punto de desplegar su nueva forma.'
+        ]
+      },
+      links: {
+        title: 'Enlaces y descargas',
+        trazosTitle: 'Trazos Club',
+        andiamoTitle: 'Andiamo',
+        trazos: [
+          { label: 'Instagram de Trazos Club', href: 'https://www.instagram.com/trazos.club/' },
+          { label: 'Canal de animaciones gif hechas con Trazos', href: 'https://giphy.com/channel/trazosclub' },
+          {
+            label: 'Descarga Tutorial Trazos Club',
+            href: 'https://drive.google.com/file/d/1jazTb6eqf9TTfjj9-q-SY8PuYl1UT9-2/view?usp=sharing'
+          },
+          { label: 'Accede al codigo fuente', href: 'https://github.com/andiamo/fideos' }
+        ],
+        andiamo: [
+          {
+            label: 'Descarga Andiamo',
+            href: 'https://drive.google.com/file/d/1xJR6hCkM_w5CIZgo7B6re3meIB4TVdsw/view?usp=sharing'
+          },
+          {
+            label: 'Descarga Tutorial Andiamo',
+            href: 'https://drive.google.com/file/d/1QABjEdGDP2fLWgBf3pu6e_8ShUoCFpjt/view?usp=sharing'
+          },
+          { label: 'Codigo fuente en GitHub', href: 'https://github.com/andiamo/andiamo' }
+        ]
+      }
+    },
+    en: {
+      intro: {
+        navTeam: 'Who we are',
+        navOrigin: 'Where we come from',
+        navLinks: 'Links and downloads',
+        paragraphs: [
+          'Trazos Club is a project for creating free software technologies, artistic and educational practices, and playful experiences.',
+          'From an open and collaborative perspective, the project connects technological development, artistic creation, and a pedagogical initiative built over years of research and practice around collective drawing and real-time animation.'
+        ],
+        contactCta: 'Contact us'
+      },
+      team: {
+        heading: 'Trazos Team',
+        introLead: 'We are Equipo Trazos, formed by',
+        conjunction: 'and',
+        introTail:
+          'coordinates the project, while the team develops the different areas of work collaboratively.',
+        paragraph2:
+          'We develop creative technologies based on live, collective, and real-time animated drawing. We are responsible for the development of Andiamo free software and the Trazos Club platform.',
+        paragraph3Lead: 'A founding member of the project is',
+        paragraph3:
+          'who designed the visual identity and logo, participated in the first steps, and now continues in a satellite role. Leandro Garber, Leslie Watkins, and Nahuel Coppero also participated in the first programming developments. Jenn Jones has recently joined as a design collaborator.',
+        paragraph4:
+          'At different stages, the project was accompanied and supported by Damian del Valle, Gabriel Gendin, Bianca Racioppe, Nahuel Canada, Ana Laura Califa, Paola Corona, Myriam Beutelspacher, Lau Castro, Universidad Nacional de las Artes, and Club Cultural Matienzo.'
+      },
+      origin: {
+        title: 'Where we come from',
+        paragraphs: [
+          'The project comes from the joint work of Andres Colubri and Marcela Rapallo since 2007, developing free technologies for live drawing and theatrical/performance works with Moldeo and Andiamo. It is also nourished by Andres Colubri work on Processing and Marcela Rapallo pedagogical projects focused on stage drawing and collective drawing.',
+          'The Trazos Club platform was born in 2016, responding to the need for a real-time collaborative technological solution using the web standards available at that time.',
+          'The project is part of the Dibujo Abierto research team at Universidad Nacional de las Artes (Argentina), with an interdisciplinary group of students and teachers. The first prototype was developed thanks to its selection in the Universidad, Diseno y Desarrollo Productivo Program of the National Ministry of Education.',
+          'A large part of this trajectory was built in community, social, and territorial contexts, especially within public education in Argentina.'
+        ]
+      },
+      future: {
+        title: 'Where we are going',
+        paragraphs: [
+          'Trazos Club is currently shaping a new stage at a larger scale. The trazos.club platform, as presented today, is a seed of that project: an initial form that grew from deep roots built through many years of collective work.',
+          'These roots were formed over time, both during the project creation process and throughout more than ten years of platform existence, through a broad and diverse community and countless meetings, workshops, events, and collective drawing experiences.',
+          'Today, the platform is the starting point of a bigger project that keeps growing from that community and seeks to become a drawing Club: a space for encounter, experimentation, and shared creation centered on live animated collective drawing. The seed is already in motion and is about to unfold into its new form.'
+        ]
+      },
+      links: {
+        title: 'Links and downloads',
+        trazosTitle: 'Trazos Club',
+        andiamoTitle: 'Andiamo',
+        trazos: [
+          { label: 'Trazos Club Instagram', href: 'https://www.instagram.com/trazos.club/' },
+          { label: 'Trazos gif animation channel', href: 'https://giphy.com/channel/trazosclub' },
+          {
+            label: 'Download Trazos Club tutorial',
+            href: 'https://drive.google.com/file/d/1jazTb6eqf9TTfjj9-q-SY8PuYl1UT9-2/view?usp=sharing'
+          },
+          { label: 'Access source code', href: 'https://github.com/andiamo/fideos' }
+        ],
+        andiamo: [
+          {
+            label: 'Download Andiamo',
+            href: 'https://drive.google.com/file/d/1xJR6hCkM_w5CIZgo7B6re3meIB4TVdsw/view?usp=sharing'
+          },
+          {
+            label: 'Download Andiamo tutorial',
+            href: 'https://drive.google.com/file/d/1QABjEdGDP2fLWgBf3pu6e_8ShUoCFpjt/view?usp=sharing'
+          },
+          { label: 'Source code on GitHub', href: 'https://github.com/andiamo/andiamo' }
+        ]
+      }
     }
+  };
 
-    function generateRandomString(length) {
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-        let result = '';
-        for (let i = 0; i < length; i++) {
-            result += characters.charAt(Math.floor(Math.random() * characters.length));
-        }
-        return result;
-    }
+  $: navCopy = copy[$languageStore].nav;
+  $: text = pageCopy[$languageStore];
 
-    function goToBoard() {
-       goto(`/board/${generateRandomString(6)}`, true );
-    }
+  function scrollIntoView({ target }) {
+    const el = document.querySelector(target.getAttribute('href'));
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth' });
+  }
 </script>
-<div class="intro-page">
-    <header id="desktopHeader">
-        <a on:click={() => goToBoard()} class="boton dibujar">¡A dibujar!</a>
-        <nav>
-            <a href="#quienes-somos" on:click|preventDefault={scrollIntoView}>Quiénes somos</a>
-            <a href="#donde-venimos" on:click|preventDefault={scrollIntoView}>De dónde venimos</a>
-            <a href="#donde-venimos" on:click|preventDefault={scrollIntoView}>A donde vamos</a>
-        </nav>
-    </header>
-        <section data-anchor="introducción" id="intro">
-            <a href="/"><img class="logo" src={logo} alt="Logo de trazos" /></a>
-            <h2>es una plataforma web para dibujo colectivo</h2>
-            <div class="texto">
-                <p>
-                Como plataforma colaborativa, nos permite conectarnos a una página web en la que podemos dibujar con otras 
-                personas y animar esos dibujos en vivo. 
-                </p>
-                <p>
-                A través del dibujo de trazos digitales animados en tiempo simultáneo, Trazos Club abre amplias posibilidades
-                    para el trabajo artístico interdisciplinario, para abordar diversos contenidos propios del ámbito escolar.
-                    A la vez, por su carácter intuitivo, es accesible a un público amplio, favoreciendo la apropiación de los 
-                    lenguajes expresivos por parte de la comunidad.
-                </p>
-                <p>
-                Desde el <strong>Equipo Trazos</strong> desarrollamos tecnologías de Software Libre utilizadas en proyectos artísticos
-                 independientes, programas educativos, sociales y comunitarios, y múltiples espacios de formación, especialmente de
-                  educación pública. También ofrecemos seminarios, talleres, y organización de eventos y actividades colaborativas.
-                </p>
-                
-                <p class="link">
-                    <a href="https://docs.google.com/document/d/1cWVBmtiji0_KpnJ54Fbaa1DNiLk31FXdLGg2NmxHIUo/edit?tab=t.0" target="_blank">
-                      <!-- <img class="andiamo" src={logoAndiamo} alt="Andiamo Live" title="" style=""> -->
-                      +info de este proyecto y tutoriales
-                    </a>
-                  </p>
-            </div>
-            <a on:click={() => goToBoard()} class="boton dibujar mobile">¡A dibujar!</a><br />
-        </section>
-        <section data-anchor="quienes-somos" id="quienes-somos">
-            <h2>QUIÉNES SOMOS</h2>
-            
-            <div class="columns">
-                <div class="colLeft">
-                    <h1>Trazos.club</h1>
-                    <p>
-                        es un proyecto<br>
-                        ideado por
-                        <a href="http://andrescolubri.net/" target="_blank">Andrés Colubri</a>
-                        &amp;
-                        <a href="http://marcelarapallo.com.ar" target="_blank">Marcela Rapallo</a>
-                    </p>
-                    <p class="second-tier">quienes forman actualmente el equipo junto a 
-                        <a href="https://gastonlozano.com/" target="_blank" style="display: inline;">
-                            Gaston Lozano</a>, programador, y 
-                        <a href="https://www.behance.net/mang" target="_blank" style="display: inline;">
-                            Manuel Gache</a>, quien diseña la identidad del proyecto.
-                    </p>
-                    <!-- <a href="#contactanos" id="btnContactar" class="boton">
-                        Contactar
-                    </a> -->
-                </div>
-                <div class="spacer"></div>
-                <div class="colRight">
-                    <p>Participaron en la programación del proyecto en sus primeros pasos: Leandro Garber, Leslie Watkins y Nahuel Coppero.</p><p style="margin-top: 20px;">Trazos Club también es un proyecto detrás del cual hay una comunidad de personas de diferentes edades que se conectan a dibujar  desde diferentes lugares del mundo. Además, se utiliza en proyectos artísticos, en ámbitos educativos, en la cotidianidad de quienes se conectan entre sí a través de la plataforma, y de todas las personas que se suman semanalmente a las jams de dibujo organizadas por el equipo de Trazos Club.</p>
-                    <p style="margin-top: 20px;">
-                        Queremos agradecer especialmente a quienes han participado y apoyado el proyecto: Myriam Beutelspacher, Bianca Racioppe, Ana Laura Califa, Lau Castro, Nahuel Cañada, la Universidad Nacional de las Artes y el Club Cultural Matienzo.             
-                    </p>
-                    <p></p>
-                </div>
-            </div>
-        </section>
-        <section data-anchor="donde-venimos" id="donde-venimos">
-            <div class="columna">
-                <img src={deDondeVenimos} alt="De donde venimos" />
-                <h2>¿De dónde venimos?</h2>
-                <div>
-                    <ul>
-                        <li>
-                            El proyecto surgió del trabajo conjunto de Andrés Colubri y Marcela Rapallo en el desarrollo de tecnologías libres para dibujo en vivo y obras teatrales y performáticas con las plataformas Moldeo y Andiamo. También del trabajo de Andrés Colubri en el desarrollo de Processing, y de los proyectos pedagógicos de Marcela Rapallo centrados en el dibujo en escena y el dibujo colectivo.
-                        </li>
-                    </ul>
-                </div>
-            </div>
-            <div class="columna">
-                <img src={aDondeVamos} alt="A donde vamos" />
-                <h2>¿A dónde vamos?</h2>
-                <p>
-                    <strong>Trazos.club</strong>, tal como se presenta hoy, es el comienzo de un proyecto más grande que estamos ideando los miembros del equipo, que crecerá tomando la forma de un Club de dibujo virtual, un lugar de encuentro con actividades de dibujo colectivo animado en vivo. Hoy la plataforma es un primer prototipo, una semilla, del proyecto a gran escala que deseamos concretar.
-                </p>
-                <!-- <p>
-                    Queremos agradecer especialmente a quienes han participado y apoyado el proyecto: Damián del Valle, Myriam Beutelspacher, Bianca Racioppe, Ana Laura Califa, y el Club Cultural Matienzo.
-                </p>    -->
-            </div>
-        </section>
+
+<div class="info-page trazos-page">
+  <SiteNav
+    current="info"
+    labels={navCopy}
+    language={$languageStore}
+    on:languageChange={(event) => languageStore.set(event.detail)}
+  />
+
+  <section id="intro">
+    <a href="/"><img class="logo" src={logo} alt="Trazos Club logo" /></a>
+
+    <nav class="section-nav">
+      <a href="#quienes-somos" on:click|preventDefault={scrollIntoView}>{text.intro.navTeam}</a>
+      <a href="#de-donde-venimos" on:click|preventDefault={scrollIntoView}>{text.intro.navOrigin}</a>
+      <a href="#enlaces" on:click|preventDefault={scrollIntoView}>{text.intro.navLinks}</a>
+    </nav>
+
+    <div class="texto">
+      {#each text.intro.paragraphs as paragraph}
+        <p>{paragraph}</p>
+      {/each}
+    </div>
+
+    <a class="boton" href="/contact">{text.intro.contactCta}</a>
+  </section>
+
+  <section id="quienes-somos">
+    <div class="section-inner team-inner">
+      <h2 class=" team-heading">{text.team.heading}</h2>
+
+      <div class="team-avatars">
+        <a href="http://marcelarapallo.com.ar" target="_blank" rel="noopener noreferrer" class="avatar-card">
+          <img src={marcelaAvatar} alt="Marcela Rapallo" />
+          <span>Marcela Rapallo</span>
+        </a>
+        <a href="http://andrescolubri.net/" target="_blank" rel="noopener noreferrer" class="avatar-card">
+          <img src={andresAvatar} alt="Andres Colubri" />
+          <span>Andres Colubri</span>
+        </a>
+        <a href="https://gastonlozano.com/" target="_blank" rel="noopener noreferrer" class="avatar-card">
+          <img src={gastonAvatar} alt="Gaston Lozano" />
+          <span>Gaston Lozano</span>
+        </a>
+      </div>
+
+      <div class="team-copy">
+        <p class="p-1">
+          {text.team.introLead}
+          <a href="http://marcelarapallo.com.ar" target="_blank" rel="noopener noreferrer"
+            >Marcela Rapallo</a
+          >,
+          <a href="http://andrescolubri.net/" target="_blank" rel="noopener noreferrer"
+            >Andres Colubri</a
+          >
+          {text.team.conjunction}
+          <a href="https://gastonlozano.com/" target="_blank" rel="noopener noreferrer"
+            >Gaston Lozano</a
+          >.
+          <a href="http://marcelarapallo.com.ar" target="_blank" rel="noopener noreferrer"
+            >Marcela Rapallo</a
+          >
+          {text.team.introTail}
+        </p>
+        <p>{text.team.paragraph2}</p>
+        <p class="top-gap">
+          {text.team.paragraph3Lead}
+          <a href="https://www.behance.net/mang" target="_blank" rel="noopener noreferrer"
+            >Manuel Gache</a
+          >,
+          {text.team.paragraph3}
+        </p>
+        <p class="top-gap">{text.team.paragraph4}</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="de-donde-venimos">
+    <div class="columna">
+      <img src={deDondeVenimos} alt={text.origin.title} />
+      <h2 class="trazos-title">{text.origin.title}</h2>
+      {#each text.origin.paragraphs as paragraph}
+        <p>{paragraph}</p>
+      {/each}
+    </div>
+
+    <div class="columna">
+      <img src={aDondeVamos} alt={text.future.title} />
+      <h2 class="trazos-title">{text.future.title}</h2>
+      {#each text.future.paragraphs as paragraph}
+        <p>{paragraph}</p>
+      {/each}
+    </div>
+  </section>
+
+  <section id="enlaces">
+    <div class="section-inner">
+      <h2 class="trazos-title">{text.links.title}</h2>
+
+      <div class="links-group">
+        <h3>{text.links.trazosTitle}</h3>
+        {#each text.links.trazos as item}
+          <a href={item.href} target="_blank" rel="noopener noreferrer">{item.label}</a>
+        {/each}
+      </div>
+
+      <div class="links-group">
+        <h3>{text.links.andiamoTitle}</h3>
+        {#each text.links.andiamo as item}
+          <a href={item.href} target="_blank" rel="noopener noreferrer">{item.label}</a>
+        {/each}
+      </div>
+    </div>
+  </section>
 </div>
+
 <style>
-.intro-page{
-    font-family: 'Roboto Mono';
-    font-weight: 300;
-}
+  .trazos-title {
+    text-transform: none;
+  }
 
-.clear {
-    clear: both;
-}
+  .info-page {
+    background: var(--trz-dark);
+    color: var(--trz-muted);
+    font-family: var(--trz-font-body);
+    min-height: 100vh;
+  }
 
-a {
+  a {
     outline: 0;
-}
+  }
 
-.spacer{
-    padding:24px;
-}
-
-.boton:hover {
-    text-decoration: underline;
-}
-.boton {
-    color: black !important;
-    text-decoration: none;
-    text-transform: uppercase;
-    font-weight: bold;
-    background-color: #00ff00;
-    display: inline-block !important;
-    padding: 0.2em 3em;
-    border-radius: 33px;
-    margin-top: 2em;
-}
-.mobile{
-    display: none !important;
-}
-
-header {
-    /*border-bottom: 1px solid #00FF00;*/
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    /*padding: 1em 0;*/
-    padding: 0.7em 0;
-    z-index: 10;
-
-    transition: opacity 0.6s, visibility 0.6s;
-}
-header.hide {
-    opacity: 0;
-    visibility: hidden;
-}
-header a.dibujar {
-    margin-left: 3%;
-    float: left;
-    cursor: pointer;
-    margin-top: 0;
-    line-height: 2.8em;
-    padding: 0 2em;
-    font-size: 0.7em;
-}
-header nav {
-    float: right;
-    line-height: 2.2em;
-}
-header nav a {
-    display: inline-block;
-    margin-right: 2em;
-    text-transform: uppercase;
-    text-decoration: none;
-    color: #00FF00;
-    font-size: 0.8em;
-}
-header nav a.active {
-    text-decoration: underline;
-}
-
-section#intro {
-    text-align: center;
+  #intro {
+    align-items: center;
     background-image: url($lib/images/fondo-intro.png);
-    background-size: cover;
     background-repeat: no-repeat;
-    padding-top: 3em;
-    min-height: 80vh;
+    background-size: cover;
     display: flex;
     flex-direction: column;
-    justify-content: space-around;
-}
-
-section#intro .logo{
-    max-width: 600px;
-    width:fit-content;
-    margin:0 auto;
-}
-
-section#intro .link{
-    margin-top: 32px;
-}
-section#intro .link a{
-    background: #00ff00;
-    color: black;
-    padding: 16px 24px;
+    padding: 112px 20px 60px;
     text-align: center;
-    font-weight: bold;
-    border-radius: 33px;
-    display: block;
-    width: fit-content;
-    margin-top: 60px;
+  }
+
+  #intro .logo {
+    margin: 0 auto 14px;
+    max-width: 560px;
+    width: min(90vw, 560px);
+  }
+
+  #intro .texto {
+    font-size: 1rem;
+    line-height: 1.6;
+    max-width: 840px;
+  }
+
+  #intro .texto p {
+    margin: 0 0 14px;
+  }
+
+  .section-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    justify-content: center;
+    margin: 8px 0 32px;
+  }
+
+  .section-nav a {
+    border: 1px solid var(--trz-accent);
+    border-radius: 999px;
+    color: var(--trz-accent);
+    display: inline-flex;
+    font-family: var(--trz-font-ui);
+    font-size: 0.8rem;
+    letter-spacing: 0.03em;
+    padding: 8px 14px;
     text-decoration: none;
-    justify-self: anchor-center;
-}
+    text-transform: uppercase;
+  }
 
-section#intro img.andiamo {
-    height: 30px;
-    width: auto;
-}
+  .section-nav a:hover {
+    background: rgba(0, 255, 0, 0.1);
+  }
 
-section#intro h2 {
-    font-size: 26px;
-    color: #00ff00;
-    font-weight: 300;
-}
-section#intro .texto {
-    font-size: 15px;
-    color: #babcbe;
-    width: 50%;
-    margin: 0 auto;
-}
-
-section#quienes-somos {
-    background-color: white;
-    color: #231f20;
-    padding-top: 2.5em;
-    display: flex;
-    flex-direction: column;
-    min-height: 70vh;
-}
-section#quienes-somos h1 {
-    color: #231f20;
-    font-size: 2.2em;
-    margin: 0;
-    padding: 0;
-}
-section#quienes-somos h2 {
-    color: #00ff00;
-    margin-top: 0;
-    font-size: 1.4em;
-    margin:auto;
-}
-section#quienes-somos a {
-    color: #00FF00;
-}
-
-section#quienes-somos p {
-    font-weight: 300;
-    color: #231f20;
-    font-size: 2.4em;
-    margin: 0;
-    padding: 0;
-}
-
-section#quienes-somos .columns{
-    display: flex;
-    justify-items: center;
-    margin: auto;
-    padding-bottom: 64px;
-}
-
-section#quienes-somos .colRight,
-section#quienes-somos .colLeft
-{
-    margin-top: 4em;
-    margin-bottom: 3em;
-    flex:1;
-    max-width: 500px;
-}
-
-section#quienes-somos .colLeft .second-tier {
-    font-size: 1.2em;
-    line-height: 36px;
-    padding-top: 16px;
-}
-
-section#quienes-somos .colRight p strong {
-    font-weight: bold;
-    margin-top: 2em;
-    display: block;
-}
-section#quienes-somos .colRight p {
-    font-size: 0.9em;
-}
-section#quienes-somos .colRight ul {
-    padding: 0 1em;
-    margin: 0;
-    margin-bottom: 1.5em;
-    margin-top: 0.3em;
-}
-section#quienes-somos .colRight ul li {
-    font-size: 0.9em;
-}
-
-section#quienes-somos .colLeft {
-    text-align: right;
-    line-height: 42px;
-    margin-top: 3.4em;
-}
-
-section#quienes-somos .colLeft a {
-    display: block;
-}
-
-
-section#donde-venimos {
-    background-image: url($lib/images/fondo-red-verde.png);
-    background-size: cover;
-    background-repeat: no-repeat;
-    display: flex;
-    min-height: 90vh;
-    padding-top: 64px;
-}
-
-section#donde-venimos strong {
-    font-weight: bold;
-}
-
-section#donde-venimos .columna {
-    float: left;
-    width: 35%;
-    text-align: center;
-    padding: 0 7%;
-}
-
-section#donde-venimos img {
-    width: 32%;
-    margin-bottom: 2.5em;
-}
-
-section#donde-venimos h2 {
-    font-weight: 300;
-    color: #00FF00;
-    font-size: 1.7em;
-}
-
-section#donde-venimos p,
-section#donde-venimos ul li {
-    font-size: 0.9em;
-}
-
-section#donde-venimos ul li {
-    margin-bottom: 1em;
-}
-
-section#donde-venimos ul li a {
-    color: #00FF00;
-}
-
-section#contacto {
-    background-color: white;
-}
-section#contacto > div {
-    vertical-align: baseline;
-}
-section#contacto h2 {
-    background-color: #00FF00;
-    text-align: center;
-    padding: 2.5em 0;
-    margin: 0;
-    color: black;
-    font-weight: 300;
-    font-size: 1.8em;
-}
-
-section#contacto input {
-    background: none;
-    border: none;
-    border-bottom: 1px solid gray;
-    width: 30%;
-    font-family: inherit;
-    line-height: 4em;
-}
-
-section#contacto input.email {
-    margin: 0 3.9%;
-}
-
-section#contacto textarea {
-    display: block;
-    width: 100%;
-    background: none;
-    border: none;
-    border-bottom: 1px solid gray;
-    resize: none;
-    margin: 9em 0 4em;
-    font-family: inherit;
-}
-
-section#contacto button {
-    border: none;
-    line-height: 3em;
-    padding: 0 3%;
-    cursor: pointer;
-
-    transition: padding 0.3s, background-color 0.3s;
-}
-section#contacto button.enviado {
-    padding: 0;
-    background-color: rgba(0,0,0,0);
-}
-section#contacto button.enviado:hover {
-    text-decoration: none;
-    cursor: default;
-}
-section#contacto fieldset {
+  .boton {
+    align-items: center;
+    background-color: var(--trz-accent);
     border: 0;
-    padding: 3em 5em;
-}
+    border-radius: 999px;
+    color: black;
+    display: inline-flex;
+    font-family: var(--trz-font-ui);
+    font-size: 0.82rem;
+    font-weight: 700;
+    gap: 6px;
+    letter-spacing: 0.03em;
+    margin-top: 32px;
+    padding: 11px 20px;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
 
-footer {
-    background-color: black;
-    position: absolute;
-    bottom: 0px;
-    left: 0px;
-    padding: 0.9em 0;
-    text-align: right;
-    width: 100%;
-}
-footer img {
-    width: 28px;
-    margin-left: 0.2em;
-}
+  .section-inner {
+    margin: 0 auto;
+    max-width: 980px;
+  }
 
-footer .flecha {
-    margin: 0 1em;
-}
-.desktopHeader a{
-    cursor: pointer;
-}
+  #quienes-somos {
+    background-color: var(--trz-light);
+    color: var(--trz-light-text);
+    padding: 38px 20px 64px;
+  }
 
+  .team-inner {
+    max-width: 980px;
+  }
 
-@media (max-width: 1000px) {
-    #desktopHeader{
-        display: none;
-    }
-    .mobile{
-        display: block !important;
-    }
-    .boton.mobile{
-        display: block !important;
-        width: 250px;
-        padding: 16px;
-        /* font-size: 2em; */
-        margin: 32px auto;
-    }
-    section#intro {
-        background: none;
-        justify-content: center;
-        align-items: center;
-    }
-    section#intro .logo {
-        /* width: 25%; */
-        width: 300px;
-    }
-    section#intro h2 {
-        font-size:1.4em;
-    }
-    section#intro .texto {
-        font-size: 1.1em;
-        width: 80%;
-    }
-    section#quienes-somos  p {
-        font-size: 2em;
+  .team-heading {
+    margin: 0 0 20px;
+    text-align: center;
+    font-family: var(--trz-font-ui);
+  }
+
+  #quienes-somos p {
+    color: var(--trz-light-text);
+    margin: 0;
+    text-align: center;
+  }
+
+  #quienes-somos a {
+    color: var(--trz-accent);
+    text-decoration: none;
+  }
+
+  #quienes-somos a:hover {
+    text-decoration: underline;
+  }
+
+  .team-avatars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    justify-content: center;
+    margin: 0 0 24px;
+  }
+
+  .avatar-card {
+    align-items: center;
+    color: var(--trz-light-text);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-decoration: none;
+    width: min(28vw, 200px);
+  }
+
+  .avatar-card img {
+    aspect-ratio: 1 / 1;
+    border: 2px solid rgba(0, 255, 0, 0.5);
+    border-radius: 999px;
+    display: block;
+    object-fit: cover;
+    width: 130px;
+  }
+
+  .avatar-card span {
+    color: var(--trz-light-text);
+    font-family: var(--trz-font-ui);
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .team-copy {
+    margin: 0 8px 0 8px;
+    max-width: 900px;
+  }
+
+  .team-copy p {
+    font-size: 0.95rem;
+    line-height: 1.62;
+    text-align: left;
+  }
+
+  .team-copy .p-1{
+    font-weight: 600;
+    font-size: 1.1em;
+    margin-bottom: 16px !important; 
+  }
+
+  .top-gap {
+    margin-top: 16px !important;
+  }
+
+  #de-donde-venimos {
+    background-image: url($lib/images/fondo-red-verde.png);
+    background-repeat: no-repeat;
+    background-size: cover;
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    padding: 54px 20px 56px;
+  }
+
+  #de-donde-venimos .columna {
+    box-sizing: border-box;
+    max-width: 500px;
+    padding: 32px;
+    text-align: center;
+    width: 42%;
+  }
+
+  #de-donde-venimos img {
+    margin-bottom: 1.5em;
+    max-width: 120px;
+    width: 32%;
+  }
+
+  #de-donde-venimos h2 {
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+  }
+
+  #de-donde-venimos p {
+    line-height: 1.62;
+    margin: 0 0 10px;
+    text-align: left;
+  }
+
+  #enlaces {
+    background: var(--trz-dark);
+    padding: 50px 20px 70px;
+  }
+
+  #enlaces .section-inner {
+    text-align: center;
+  }
+
+  #enlaces h2 {
+    font-size: 1.7rem;
+    margin: 0 0 32px;
+  }
+
+  .links-group {
+    align-items: center;
+    background: rgba(6, 10, 15, 0.74);
+    border: 1px solid rgba(0, 255, 0, 0.2);
+    border-radius: 16px;
+    display: grid;
+    gap: 10px;
+    margin: 0 auto 14px;
+    max-width: 760px;
+    padding: 20px;
+  }
+
+  .links-group h3 {
+    color: var(--trz-accent);
+    font-family: var(--trz-font-display);
+    font-size: 1.25rem;
+    margin: 0 0 8px;
+    text-transform: uppercase;
+  }
+
+  .links-group a {
+    color: var(--trz-muted);
+    line-height: 1.5;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .links-group a:hover {
+    color: var(--trz-accent);
+    text-decoration: underline;
+  }
+
+  @media (max-width: 1000px) {
+    #intro {
+      background-position: center;
+      padding-top: 96px;
     }
 
-    section#quienes-somos .columns{
-        flex-direction: column;
-        width: 80%;
+    #de-donde-venimos {
+      flex-direction: column;
     }
-    section#quienes-somos .colLeft,section#quienes-somos .colRight {
-        text-align: center;
-    }
-    section#quienes-somos .spacer{
-        display: none;
-    }
-    section#quienes-somos .colRight{
-        width: 100%;
-        margin: 0;
-    }
-    section#quienes-somos .colRight ul li {
-        font-size: 1.2em;
-    }
-    section#quienes-somos h2 {
-        font-size: 1.4em;
-    }
-    section#quienes-somos #btnContactar{
-        font-size: 1.2em;
-    }
-    section#donde-venimos{
-        flex-direction: column;
-        padding: 0 10%;
-    }
-    section#donde-venimos .columna {
-        float: none;
-        width: 100%;
-        text-align: center;
-        padding: 0;
-        font-size: 1.1em;
-    }
-    section#donde-venimos h2{
-        margin: 0;
-    }
-    section#donde-venimos .fp-tableCell{
-        padding: 30px 60px;
-    }
-    section#donde-venimos ul{
-        list-style: none;
-        padding-left: 0;
-    }
-    
-    section#donde-venimos img {
-        width: 28%;
-        margin-bottom: 0;
-        margin-top: 25px;
-    }
-    section#contacto input,section#contacto textarea {
-        font-size: 1.8em;
-    }
-    section#contacto textarea {
-        margin:3em 0 4em;
-    }
-    section#contacto #btnEnviar{
-        font-size: 1.8em;
-    }
-}
 
+    #de-donde-venimos .columna {
+      max-width: none;
+      padding: 20px 8px;
+      width: 100%;
+    }
 
+    .team-avatars {
+      justify-content: center;
+    }
+
+    .avatar-card {
+      width: min(40vw, 180px);
+    }
+
+    #de-donde-venimos {
+      padding: 30px 20px 44px;
+    }
+
+    #de-donde-venimos p {
+      text-align: center;
+    }
+  }
 </style>
-
-    <!-- <script src="../js/lib/jquery.min.js"></script>
-    <script src="../js/lib/jquery.fullPage.min.js" charset="utf-8"></script>
-    <script src="../js/trazos/about.js" charset="utf-8"></script> -->

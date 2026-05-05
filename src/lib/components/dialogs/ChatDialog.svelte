@@ -1,16 +1,19 @@
 
 <script>
     import { fade } from 'svelte/transition';
-    import Textfield, {Input} from '@smui/textfield';
-    import Dialog, { Title, Content, Actions } from '@smui/dialog';
+    import Textfield from '@smui/textfield';
+    import Dialog, { Content } from '@smui/dialog';
     import Button, { Label } from '@smui/button';
     import IconButton from '@smui/icon-button';
     import { page } from '$app/stores';
-    import {socket} from '$lib/stores/socketStore';
+    import {socket, setCanvasUsername} from '$lib/stores/socketStore';
+    import {loadCanvasUsername, saveCanvasUsername} from '$lib/stores/usernameStore';
     import { onMount } from 'svelte';
 
     export let showDialog = false;
     export let unreadNum = 0;
+    export let forceOnboarding = false;
+    export let renameMode = false;
     
     onMount(() => {
         $socket.on('chat login', (data)=>chatLogin(data));
@@ -19,6 +22,11 @@
         $socket.on('user joined', (data)=>newUser(data));
         $socket.on('typing', (data)=>userTyping(data));
         $socket.on('stop typing', (data)=>userStopTyping(data));
+
+        var storedUsername = loadCanvasUsername();
+        if (storedUsername) {
+            username = storedUsername;
+        }
     });
 
     var TYPING_TIMER_LENGTH = 400; // ms
@@ -38,15 +46,40 @@
     let username = "";
     let usernameInvalid = false;
     let usernameValidated = false;
+
+    $: if (showDialog && !forceOnboarding && !renameMode && !usernameValidated && username.trim()) {
+        enterChat(true);
+    }
+
+    $: if (renameMode && showDialog) {
+        usernameValidated = false;
+        usernameInvalid = false;
+        if (!username) {
+            username = loadCanvasUsername();
+        }
+    }
+
+    $: if (!showDialog && renameMode) {
+        renameMode = false;
+    }
     
-    function enterChat(){
-        if(username == ""){
+    function enterChat(joinChat = true){
+        if(usernameValidated && joinChat) return;
+        var normalizedUsername = username.trim();
+        if(normalizedUsername == ""){
             usernameInvalid = true;
         }else{
             usernameInvalid = false;
+            username = normalizedUsername;
+            saveCanvasUsername(normalizedUsername);
+            setCanvasUsername(normalizedUsername);
+            if (!joinChat) {
+                showDialog = false;
+                return;
+            }
             usernameValidated = true;
             $socket.emit('add user', username);
-            setTimeout(()=>chatInput.focus(),200);
+            if (chatInput) setTimeout(()=>chatInput.focus(),200);
         }
     }
 
@@ -100,7 +133,7 @@
             });
             $socket.emit('new message', message);
             chatMsg = "";
-            setTimeout(()=>chatInput.focus(),200);
+            if (chatInput) setTimeout(()=>chatInput.focus(),200);
         }
     }
 
@@ -147,12 +180,12 @@
     }
 </script>
 
-<Dialog bind:open={showDialog} >
+<Dialog bind:open={showDialog} scrimClickAction={forceOnboarding && !usernameValidated ? '' : 'close'} escapeKeyAction={forceOnboarding && !usernameValidated ? '' : 'close'}>
     <!-- <Title>Chat</Title> -->
     {#if !usernameValidated}
         <Content>
-            <form class="pick-username">
-                <span>Escoge un sobrenombre e ingresa al chat</span>
+            <form class="pick-username" on:submit|preventDefault={() => enterChat(!(forceOnboarding || renameMode))}>
+                <span>{forceOnboarding ? 'Escoge un sobrenombre para entrar a la sala' : renameMode ? 'Cambiá tu sobrenombre' : 'Escoge un sobrenombre e ingresa al chat'}</span>
                 <Textfield
                     class="shaped-outlined"
                     variant="outlined"
@@ -161,8 +194,8 @@
                     label="Sobrenombre">
                     <!-- <HelperText slot="helper">Helper Text</HelperText> -->
                 </Textfield>
-                <Button variant="raised" on:click={enterChat}>
-                    <Label>Ingresar</Label>
+                <Button variant="raised" type="submit">
+                    <Label>{forceOnboarding || renameMode ? 'Guardar' : 'Ingresar'}</Label>
                 </Button>
             </form>
         </Content>

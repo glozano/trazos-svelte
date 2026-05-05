@@ -2,14 +2,15 @@
     import { fade } from 'svelte/transition';
     import LoopIcon from '$lib/components/icons/LoopIcon.svelte';
     import NoloopIcon from '$lib/components/icons/NoloopIcon.svelte';
-    import trash from '$lib/images/icons/delete.png';
+    import trash from '$lib/images/icons/tacho.svg';
+    import trashPressed from '$lib/images/icons/tacho_click.svg';
     import {canvasParams, layers} from '$lib/stores/boardStore';
     import {deleteLayer} from '$lib/stores/socketStore';
     import FloatingOption from '$lib/components/canvas/FloatingOption.svelte';
     import LayersIcon from '$lib/components/icons/LayersIcon.svelte';
     import {DELETE_FACTOR} from '$lib/andiamo/parameters';
     import SpeedIcon from '$lib/components/icons/SpeedIcon.svelte';
-    import { onMount } from 'svelte';
+    import { onDestroy, onMount } from 'svelte';
 
     let minSize = 0.1;
     let maxSize = 2;
@@ -17,6 +18,10 @@
     let maxSpeed = 8;
     let minSpeed = 0;
     let speedInputValue;
+    let deletePressed = false;
+    let deletePressedTimeout;
+    let layerFloatingOption;
+    let colorFloatingOption;
 
     var colors = [
         { "css": "#000000", "rgb": [0, 0, 0] },
@@ -35,12 +40,32 @@
         speedInputValue = adjustSpeed($canvasParams.loopMultiplier);
     });
 
+    onDestroy(() => {
+        clearTimeout(deletePressedTimeout);
+    });
+
     function triggerDelete(i){
         for (var j = $layers[i].length - 1; j >= 0; j--) {
             $layers[i][j].looping = false;
             $layers[i][j].fadeOutFact = DELETE_FACTOR;
         }
         deleteLayer(i);
+    }
+
+    function deleteSelectedLayer(){
+        triggerDelete($canvasParams.layer);
+    }
+
+    function showDeletePressed(){
+        clearTimeout(deletePressedTimeout);
+        deletePressed = true;
+    }
+
+    function hideDeletePressed(){
+        clearTimeout(deletePressedTimeout);
+        deletePressedTimeout = setTimeout(() => {
+            deletePressed = false;
+        }, 600);
     }
     
     function adjustSpeed(input) {
@@ -56,14 +81,20 @@
 
     function setColor(color){
         $canvasParams.color = color;
+        colorFloatingOption?.closeOptions();
+    }
+
+    function setLayer(layer) {
+        $canvasParams.layer = layer;
+        layerFloatingOption?.closeOptions();
     }
 
 </script>
 
 
 <div class="bottom-bar">
-    <div class="floating-left">
-        <FloatingOption>
+    <div class="floating-controls">
+        <FloatingOption bind:this={layerFloatingOption}>
             <div slot="optionSelector">
                 <div class="layers-selector">
                     {#each _layers as layer}
@@ -71,7 +102,7 @@
                             <div 
                                 class="layer-button" 
                                 style={`background-color:${$canvasParams.layer == layer ? "#45ff4d59" : "#45454d91"}`}
-                                on:click={()=>{$canvasParams.layer = layer}}
+                                on:click={() => setLayer(layer)}
                                 
                                 >
                                 <svg viewBox="187.6805 115.4854 102.155 46.7506" width="40" height="19">
@@ -86,9 +117,6 @@
                                     Capa {layer+1}
                                 </span>
                             </div>
-                            <div class="layer-delete" on:click={()=>triggerDelete(layer)}>
-                                <img src={trash} alt="delete-layer"/>
-                            </div>
                         </div>
                     {/each}
                 </div>
@@ -99,8 +127,20 @@
                 </div>    
             </div>
         </FloatingOption>
-    </div>
-    <div class="floating-right">
+        <div class="floating-opt-wrapper delete-layer-wrapper">
+            <button 
+                class="floating-opt delete-layer-button" 
+                class:active={deletePressed}
+                type="button" 
+                aria-label="Delete selected layer" 
+                on:pointerdown={showDeletePressed}
+                on:pointerup={hideDeletePressed}
+                on:pointerleave={hideDeletePressed}
+                on:click={deleteSelectedLayer}
+            >
+                <img src={deletePressed ? trashPressed : trash} alt="delete-layer"/>
+            </button>
+        </div>
         <FloatingOption>
             <div slot="selectedOption">
                 <!-- on:click={()=>$canvasParams.looping = !$canvasParams.looping} -->
@@ -164,7 +204,7 @@
                 />
             </div>
         </FloatingOption>
-        <FloatingOption>
+        <FloatingOption bind:this={colorFloatingOption}>
             <div slot="optionSelector">
                 <div class="color-options" transition:fade={{ delay: 100, duration: 200 }}>
                     {#each colors as color, i}
@@ -188,20 +228,35 @@
         position: fixed;
         bottom: 0;
         width:100%;
-        justify-content: space-between;
+        justify-content: center;
         align-items: end;
     }
    
-    .floating-right{
+    .floating-controls{
         display: flex;
         flex-direction: row;
         align-items: end;
+        justify-content: center;
+        position: relative;
     }
     .selected-layer,.selected-speed,.selected-loop{
         display: flex;
         margin: auto;
     }
-    
+    .delete-layer-button img{
+        width: 35px;
+        height: 35px;
+        margin: auto;
+    }
+    .delete-layer-button.active img{
+        transform: rotate(-8deg);
+    }
+    .delete-layer-button{
+        appearance: none;
+        box-sizing: content-box;
+        justify-content: center;
+        align-items: center;
+    }
     .selected-color{
         width: 90%;
         margin: auto;
@@ -274,27 +329,24 @@
         align-items: center;
         background-color: #45454d91;
         border-radius: 6px;
-        margin-right: 16px;
         padding-left: 8px;
+        inline-size: max-content;
         cursor: pointer;
     }
     .layer-button span{
         font-family: monospace;
         display: block;
-        padding: 20px;
+        padding: 14px;
     }
     .layers-selector svg{
         
     }
-    .layers-selector img{
-        width: 20px;
-    }
-    .layer-delete{
-        cursor: pointer;
-    }
-
     :global(.fixed svg){
         fill:  rgb(176, 176, 176) !important;
+    }
+
+    .color-opt {
+        margin: 4px 8px;
     }
 
     @media (min-width: 768px){
@@ -304,12 +356,21 @@
             position: fixed;
             width: auto;
             top: 80px;
+            bottom: auto;
             left: 0;
             justify-content: start;
+            align-items: start;
         }
-        .floating-right{
+        .color-opt {
+            margin: 8px 4px;
+        }
+        .floating-controls{
             flex-direction: column-reverse;
-            align-items: end;
+            align-items: start;
+            justify-content: start;
+        }
+        .delete-layer-wrapper{
+            order: -1;
         }
         .color-options{
             display: flex;
@@ -319,11 +380,6 @@
             left: 70px;
         }
         .floating-opt{
-            display: flex;
-            flex-direction: row-reverse;
-            justify-content: start;
-        }
-        .floating-opt-wrapper{
             display: flex;
             flex-direction: row-reverse;
             justify-content: start;
@@ -346,9 +402,12 @@
             width: 350px;
         }
         .layers-selector{
-            left:75px;
+            left: calc(100% + 8px);
+            top: 50%;
+            transform: translateY(-50%);
             width: max-content;
             bottom: auto;
+            margin-left: 0;
         }
     }
 </style>

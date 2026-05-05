@@ -8,23 +8,37 @@
     import ChatIcon from '$lib/components/icons/chatIcon.svelte';
     import ShareIcon from '$lib/components/icons/ShareIcon.svelte';
     import GifIcon from '$lib/components/icons/gifIcon.svelte';
-    import { goto } from '$app/navigation';
     import ShareDialog from './dialogs/ShareDialog.svelte';
     import ChatDialog from './dialogs/ChatDialog.svelte';
     import GifDialog from './dialogs/GifDialog.svelte';
     import { gifStore } from '$lib/stores/gifStore';
         
     export let active = true;
+    export let forceUsernamePrompt = false;
+    export let renameModalTrigger = 0;
     let topAppBar;
     let chatMessages = 0;
     let chatDialog = false;
     let gifDialog = false;
     let shareDialog = false;
+    let renameMode = false;
+    let lastRenameModalTrigger = 0;
 
     let triggerGifModal = () => {
         gifDialog = true; 
-        $gifStore.triggerCreateGif();
+        $gifStore.createGif?.();
     };
+
+    $: if (forceUsernamePrompt) {
+        renameMode = false;
+        chatDialog = true;
+    }
+
+    $: if (renameModalTrigger !== lastRenameModalTrigger) {
+        lastRenameModalTrigger = renameModalTrigger;
+        renameMode = true;
+        chatDialog = true;
+    }
 </script>
 
 <TopAppBar bind:this={topAppBar} variant="fixed" class="mdc-theme--surface">
@@ -58,14 +72,11 @@
   {#if active}
   <ShareDialog bind:showDialog={shareDialog}></ShareDialog>
   <GifDialog bind:showDialog={gifDialog}></GifDialog>
-  <ChatDialog bind:showDialog={chatDialog} bind:unreadNum={chatMessages}></ChatDialog>
+  <ChatDialog bind:showDialog={chatDialog} bind:unreadNum={chatMessages} bind:renameMode={renameMode} forceOnboarding={forceUsernamePrompt}></ChatDialog>
    {/if}
 <style>
     .logo-link{
         height: 30px;
-    }
-    .link-row{
-        padding-top: 16px;
     }
     :global(.link-row label){
         width: 100%;
