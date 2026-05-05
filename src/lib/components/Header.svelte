@@ -26,7 +26,7 @@
 
     let triggerGifModal = () => {
         gifDialog = true; 
-        $gifStore.triggerCreateGif();
+        $gifStore.createGif?.();
     };
 
     $: if (forceUsernamePrompt) {
@@ -77,9 +77,6 @@
 <style>
     .logo-link{
         height: 30px;
-    }
-    .link-row{
-        padding-top: 16px;
     }
     :global(.link-row label){
         width: 100%;

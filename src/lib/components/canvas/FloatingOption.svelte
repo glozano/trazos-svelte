@@ -1,30 +1,44 @@
 <script>
-    import { onMount, onDestroy } from 'svelte';
-    import { fade } from 'svelte/transition';
+    import { onDestroy } from 'svelte';
     import {openModals} from '$lib/stores/boardStore';
 
     export let active = true;
     let optionsVisible = false;
     let wrapper;
 
+    function syncModalState(isOpen){
+        if (isOpen) {
+            $openModals = $openModals + 1;
+            document.addEventListener('click', handleOutsideClick);
+        } else {
+            $openModals = $openModals - 1;
+            document.removeEventListener('click', handleOutsideClick);
+        }
+    }
+
+    export function closeOptions() {
+        if (!optionsVisible) {
+            return;
+        }
+
+        optionsVisible = false;
+        syncModalState(false);
+    }
+
     function toggleOptionsVisibility(){
         optionsVisible = !optionsVisible;
-        if(optionsVisible){
-            $openModals = $openModals + 1;
-            // document.addEventListener('touchstart', handleOutsideClick);
-            document.addEventListener('click', handleOutsideClick);
-        }else{
-            $openModals = $openModals - 1;
-            // document.removeEventListener('touchstart', handleOutsideClick);
-            document.addEventListener('click', handleOutsideClick);
-        }
+        syncModalState(optionsVisible);
     }
 
     function handleOutsideClick(event) {
         if (optionsVisible && wrapper && !wrapper.contains(event.target)) {
-            toggleOptionsVisibility();
+            closeOptions();
         }
     }
+
+    onDestroy(() => {
+        document.removeEventListener('click', handleOutsideClick);
+    });
     
 </script>
 
@@ -52,9 +66,7 @@
     }
     :global(.floating-opt-wrapper){
         width: 70px;
-    }
-    :global(.floating-left .floating-opt-wrapper){
-        width: unset;
+        position: relative;
     }
     .floating-opt img{
         width: 100%;

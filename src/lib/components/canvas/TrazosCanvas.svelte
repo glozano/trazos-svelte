@@ -52,6 +52,24 @@
         new MultiMap()
     ];
 
+    function debugTrazosSocketEnabled(){
+        if (typeof window === 'undefined') return false;
+        return window.localStorage?.DEBUG_TRAZOS_SOCKET === 'true'
+            || new URLSearchParams(window.location.search).get('debugTrazosSocket') === '1';
+    }
+
+    function debugSocketEvent(action, data){
+        if (!debugTrazosSocketEnabled()) return;
+        console.log('[trazos-socket]', action, {
+            event: data?.e,
+            id: data?.id,
+            gestureId: data?.gesture_id,
+            layer: data?.layer,
+            x: data?.x,
+            y: data?.y
+        });
+    }
+
     onMount(() => {
         var storedUsername = loadCanvasUsername();
         clientConnect(storedUsername);
@@ -107,7 +125,8 @@
                     var gesture = other.values()[j];
                     gesture.update(t);
                     gesture.draw();
-                    if(!gesture.visible && !gesture.looping){
+                    if(!gesture.visible && !gesture.looping && gesture.remoteComplete !== false){
+                        otherRibbons.remove(gesture.gestureId || gesture.id);
                         other.remove(gesture.id);
                     }
                     otherGesturesCount++;
@@ -190,6 +209,8 @@
 
     // Parece que el dissapearing y el alpha se comparten con el board Y la velocidad tambien???
     function externalMouseEvent(data){
+        debugSocketEvent('receive', data);
+        var gestureKey = data.gesture_id || data.id;
         /*
         MOUSE PRESS
         */
@@ -204,17 +225,21 @@
 
             // Agregamos este gesture a la lista de gestures
             var newGesture = new StrokeGesture(_p5,$canvasParams.dissapearing, data.fixed, lastGesture, layer, $canvasParams.loopMultiplier);
+            newGesture.gestureId = gestureKey;
+            newGesture.ownerId = data.id;
+            newGesture.id = gestureKey;
+            newGesture.remoteComplete = false;
             newGesture.setStartTime(t0);
-            otherGestures[layer].put(data.id, newGesture);
+            otherGestures[layer].put(gestureKey, newGesture);
 
             // Agregamos un ribbon
             var newRibbon = new Ribbon(_p5);
             // Inicializamos el ribbon
             newRibbon.init(data.stroke_weight);
-            otherRibbons.put(data.id, newRibbon);
+            otherRibbons.put(gestureKey, newRibbon);
 
             // Le agregamos este punto
-            var other = otherGestures[layer].get(data.id);
+            var other = otherGestures[layer].get(gestureKey);
             newRibbon.addPoint(other[other.length-1], t0, data.color, $canvasParams.alpha, data.x, data.y);
         }
 
@@ -224,9 +249,13 @@
 
         if (data.e === "DRAGGED") {
             var layer = data.layer;
-            var other = otherGestures[layer].get(data.id);
+            var other = otherGestures[layer].get(gestureKey);
+            if(!other || !other.length) {
+                debugSocketEvent('ignore missing gesture for drag', data);
+                return;
+            }
             var otherGesture = other[other.length-1];
-            var otherRibbon = otherRibbons.get(data.id);
+            var otherRibbon = otherRibbons.get(gestureKey);
 
             // Agregamos el punto
             var t0 = otherGesture.getStartTime();
@@ -241,9 +270,13 @@
 
         if (data.e === "RELEASED") {
             var layer = data.layer;
-            var other = otherGestures[layer].get(data.id);
+            var other = otherGestures[layer].get(gestureKey);
+            if(!other || !other.length) {
+                debugSocketEvent('ignore missing gesture for release', data);
+                return;
+            }
             var otherGesture = other[other.length-1];
-            var otherRibbon = otherRibbons.get(data.id);
+            var otherRibbon = otherRibbons.get(gestureKey);
 
             // Seteamos el ultimo punto
             var t0 = otherGesture.getStartTime();
@@ -255,21 +288,63 @@
             // Seteamos el looping
             otherGesture.setLooping(data.looping);
             otherGesture.setEndTime(t1);
+            otherGesture.remoteComplete = true;
         }
     }
     
     function deleteHandler(data) {
-        var layer = data.layer;
-        var id = data.id;
-        var gestures = null;
-        if(otherGestures[layer]) gestures = otherGestures[layer].get(id);
-        if(!gestures || !gestures.length) return;
+        var layer = normalizeLayer(data.layer);
+        var deleteId = data.id;
+        var gestureId = data.gesture_id;
+
+        replayQueue = replayQueue.filter((item) => !replayEventMatchesDelete(item.data, data));
+
+        if(gestureId){
+            fadeGestures(otherGestures[layer] ? otherGestures[layer].get(gestureId) : []);
+            fadeGestures($layers[layer].filter((gesture) => gesture.gestureId == gestureId));
+            if($currentGesture && $currentGesture.gestureId == gestureId){
+                $currentGesture.looping = false;
+                $currentGesture.fadeOutFact = DELETE_FACTOR;
+            }
+            return;
+        }
+
+        fadeGestures(
+            otherGestures[layer]
+                ? otherGestures[layer].values().filter((gesture) => gesture.ownerId == deleteId)
+                : []
+        );
+
+        if(deleteId == $id){
+            fadeGestures($layers[layer]);
+            if($currentGesture && $canvasParams.layer == layer){
+                $currentGesture.looping = false;
+                $currentGesture.fadeOutFact = DELETE_FACTOR;
+            }
+        }
+    }
+
+    function normalizeLayer(layer) {
+        var normalized = Number(layer || 0);
+        return Number.isFinite(normalized) ? normalized : 0;
+    }
+
+    function replayEventMatchesDelete(eventData, deleteData) {
+        if(!eventData || !deleteData) return false;
+        if(deleteData.gesture_id){
+            return String(eventData.gesture_id || '') === String(deleteData.gesture_id);
+        }
+        if(deleteData.id == null) return false;
+        return String(eventData.id) === String(deleteData.id)
+            && normalizeLayer(eventData.layer) === normalizeLayer(deleteData.layer);
+    }
+
+    function fadeGestures(gestures) {
+        if(!gestures) return;
         for (var idx in gestures) {
-            var g = gestures[idx];
-            // if (g.layer == layer) {
-            g.looping = false;
-            g.fadeOutFact = DELETE_FACTOR;
-            // }
+            gestures[idx].looping = false;
+            gestures[idx].fadeOutFact = DELETE_FACTOR;
+            gestures[idx].remoteComplete = true;
         }
     }
     
@@ -325,11 +400,12 @@
             'stroke_weight':$canvasParams.ribbonWidth,
             'layer': $canvasParams.layer,
             'fixed':$canvasParams.fixed,
-            // 'gesture_id': $currentGesture.gestureId,
+            'gesture_id': $currentGesture.gestureId,
             'id': $id
         }
 
         // Emitimos el evento a los demas clientes.
+        debugSocketEvent('emit', movement);
         $socket.emit("externalMouseEvent", movement);
 
         
@@ -349,9 +425,10 @@
                 'color': $canvasParams.color,
                 'stroke_weight':$canvasParams.ribbonWidth,
                 'layer': $canvasParams.layer,
-                // 'gesture_id': $currentGesture.gestureId,
+                'gesture_id': $currentGesture.gestureId,
                 'id': $id
             }
+            debugSocketEvent('emit', movement);
             $socket.emit("externalMouseEvent", movement);
 
             $currentRibbon.addPoint($currentGesture, t, $canvasParams.color, $canvasParams.alpha, p5.mouseX, p5.mouseY);
@@ -389,10 +466,11 @@
                 'stroke_weight':$canvasParams.ribbonWidth,
                 'layer': $canvasParams.layer,
                 'looping': $canvasParams.looping,
-                // 'gesture_id': $currentGesture.gestureId,
+                'gesture_id': $currentGesture.gestureId,
                 'id': $id
             }
             
+            debugSocketEvent('emit', movement);
             $socket.emit("externalMouseEvent", movement);
 
             $prevGesture = $currentGesture;

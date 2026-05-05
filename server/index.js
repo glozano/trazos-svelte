@@ -4,532 +4,1074 @@ import { Server } from 'socket.io'
 import { handler } from '../build/handler.js'
 import console from 'console'
 import uap from 'ua-parser-js'
-import textBody from 'body'
-import { v4 as uuidv4 } from 'uuid';
-import { mkdirp } from 'mkdirp'
-import { writeFile } from 'node:fs';
+import path from 'node:path'
+import { MongoClient } from 'mongodb'
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto'
+import { promisify } from 'node:util'
+import { cleanupOldGifFiles, saveGifDataUrl } from './gif-utils.js'
 
+const scrypt = promisify(scryptCallback)
 
-import { MongoClient }  from 'mongodb'
+const memoryEnabled = parseBoolean(process.env.TRAZOS_MEMORY_ENABLED, true)
+const port = Number(process.env.PORT || 3000)
+const mongoUrl = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017'
+const dbName = process.env.MONGO_DB_NAME || 'mongo_trazos'
+const linesCollectionName = process.env.MONGO_LINES_COLLECTION || 'lines'
+const memoryTtlSeconds = Math.max(1, parseNumber(process.env.TRAZOS_MEMORY_TTL_SECONDS, 3 * 60 * 60))
+const replayLimit = Math.max(0, parseNumber(process.env.TRAZOS_MEMORY_REPLAY_LIMIT, 0))
+const adminSessionTtlSeconds = Number(process.env.ADMIN_SESSION_TTL_SECONDS || 86400)
+const adminCookieName = 'trazos_admin_session'
+const autoEraseDefaultMaxTrazos = 500
+const autoEraseMaxTrazosLimit = 10000
+const boardLayerCount = 4
+const gifUrlPrefix = '/user-img'
+const gifTempDir = path.resolve(process.env.GIF_TEMP_DIR || 'static/user-img')
+const gifMaxBytes = Math.max(1, parseNumber(process.env.GIF_MAX_BYTES, 12 * 1024 * 1024))
+const gifTempTtlMs = Math.max(1, parseNumber(process.env.GIF_TEMP_TTL_SECONDS, 30 * 60)) * 1000
+const gifCleanupIntervalMs = Math.max(1, parseNumber(process.env.GIF_CLEANUP_INTERVAL_SECONDS, 5 * 60)) * 1000
+const giphyApiKey = process.env.GIPHY_API_KEY || ''
+const giphyUsername = process.env.GIPHY_USERNAME || 'trazosclub'
+const giphyTags = process.env.GIPHY_TAGS || 'trazos,trazosclub,processing,collaborative,drawing,draw'
+const debugTrazosSocket = parseBoolean(process.env.DEBUG_TRAZOS_SOCKET, false)
 
-
-const MEMORY_ENABLED = parseBoolean(process.env.TRAZOS_MEMORY_ENABLED, true);
-const port = Number(process.env.PORT || 3000);
-const mongoUrl = process.env.MONGO_URL || 'mongodb://localhost:27017';
-const mongoDbName = process.env.MONGO_DB_NAME || 'mongo_trazos';
-const mongoCollectionName = process.env.MONGO_LINES_COLLECTION || 'lines';
-const memoryTtlSeconds = Math.max(1, parseNumber(process.env.TRAZOS_MEMORY_TTL_SECONDS, 3 * 60 * 60));
-const replayLimit = Math.max(0, parseNumber(process.env.TRAZOS_MEMORY_REPLAY_LIMIT, 0));
-
-// SvelteKit should handle everything else using Express middleware
-// https://github.com/sveltejs/kit/tree/master/packages/adapter-node#custom-server
-
-
-//////////////////////
-
-// Dependencias
-
-// var textBody = require("body");
-const app = express();
-
-app.post('/files', function(req, res) {
-    const extract = function (err, data) {
-        if (!data) return
-        res.setHeader('Content-Type', 'application/json');
-        const filePath = saveImage(data);
-        res.send(JSON.stringify({ filename: filePath}));
-        console.log('Saved file: ' + filePath);
-    }
-
-    textBody(req, extract);
-});
-
-
-const server = createServer(app);
-const io = new Server(server,{
+const app = express()
+const server = createServer(app)
+const io = new Server(server, {
     connectionStateRecovery: {
-      // the backup duration of the sessions and the packets
-      maxDisconnectionDuration: 2 * 60 * 1000,
-      // whether to skip middlewares upon successful recovery
-      skipMiddlewares: true,
+        maxDisconnectionDuration: 2 * 60 * 1000,
+        skipMiddlewares: true,
     }
-  })
-// var fs = require("fs");
+})
 
-// var Hashids = require("hashids"),
-// hashids = new Hashids("this is my salt",0, "0123456789abcdef");
-var connections = 0;
-var chatConnections = [];
-var log =[];
+let db = null
+let mongoClient = null
+const boards = new Map()
+const adminSockets = new Set()
+let adminStateTimer = null
 
+app.use(express.json())
+app.use(express.urlencoded({ extended: false }))
+app.use(gifUrlPrefix, express.static(gifTempDir, {
+    fallthrough: false,
+    immutable: true,
+    maxAge: '30m'
+}))
 
-// MongoDB vars
-var db = null;
-var mongoClient = null;
+app.post('/files', express.text({ type: '*/*', limit: gifMaxBytes }), async function(req, res) {
+    try {
+        const saved = await saveTemporaryGif(req.body)
+        res.json({ filename: saved.urlPath.replace(/^\//, ''), url: saved.urlPath })
+        console.log('Saved GIF: ' + saved.urlPath)
+    } catch (error) {
+        sendGifError(res, error)
+    }
+})
 
-// const Mailjet = require('node-mailjet');
-// const mailjet = Mailjet.apiConnect(
-//     '****************************1234', '****************************abcd'
-// );
-// const mailjet = require('node-mailjet');
-// const mailjetConnection = mailjet.connect('****************************1234', '****************************abcd');
-// console.log(mailjetConnection);
+app.post('/api/gifs/giphy', express.text({ type: '*/*', limit: gifMaxBytes }), async function(req, res) {
+    if (!giphyApiKey) {
+        res.status(503).json({ error: 'giphy_not_configured' })
+        return
+    }
 
-// Mapea los socket ids con el id generado por cada cliente
-var clients = [];
+    try {
+        const saved = await saveTemporaryGif(req.body)
+        const sourceImageUrl = `${getRequestBaseUrl(req)}${saved.urlPath}`
+        const formData = new FormData()
+        formData.append('api_key', giphyApiKey)
+        formData.append('username', giphyUsername)
+        formData.append('source_image_url', sourceImageUrl)
+        formData.append('tags', giphyTags)
 
-// Lo uso para generar ids de boards
-var boards = {};
-
-function initDB(){
-    // Use a single client connection for all Mongo operations.
-    return (async function connectMongo() {
-        mongoClient = new MongoClient(mongoUrl);
-        await mongoClient.connect();
-        db = mongoClient.db(mongoDbName);
-        console.log("Connected successfully to Mongo");
-        console.log('Mongo running on: '+mongoUrl);
-    })();
-}
-
-function memoryReady() {
-    return MEMORY_ENABLED && db !== null;
-}
-
-function parseBoolean(value, defaultValue) {
-    if (value == null) return defaultValue;
-    return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
-}
-
-function parseNumber(value, defaultValue) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : defaultValue;
-}
-
-function normalizeUsername(value) {
-    if (typeof value !== 'string') return '';
-    return value.trim().slice(0, 40);
-}
-
-async function ensureMemoryIndexes() {
-    if(!memoryReady()) return;
-    await db.collection(mongoCollectionName).createIndex(
-        { board: 1, timestamp: 1 },
-        { name: 'board_timestamp_idx' }
-    );
-    await db.collection(mongoCollectionName).createIndex(
-        { board: 1, user: 1, layer: 1 },
-        { name: 'board_user_layer_idx' }
-    );
-    await db.collection(mongoCollectionName).createIndex(
-        { timestamp: 1 },
-        { name: 'timestamp_ttl_idx', expireAfterSeconds: memoryTtlSeconds }
-    );
-}
-
-function getActiveBoards() {
-    return Object.values(boards)
-        .filter((board) => board && !board.isPrivate && board.connections > 0)
-        .sort((a, b) => {
-            if (b.connections !== a.connections) return b.connections - a.connections;
-            return String(b.lastActiveAt || '').localeCompare(String(a.lastActiveAt || ''));
+        const response = await fetch('https://upload.giphy.com/v1/gifs', {
+            method: 'POST',
+            body: formData
         })
-        .map((board) => ({
-            id: board.id,
-            connections: board.connections
-        }));
-}
 
-function getConnectedBoardClients(roomId) {
-    return clients.filter((client) => client.board === roomId && client.connected);
-}
+        const payload = await response.json().catch(() => null)
+        if (!response.ok || !payload?.data?.id) {
+            console.error('GIPHY upload failed:', payload)
+            res.status(502).json({ error: 'giphy_upload_failed' })
+            return
+        }
 
-function getBoardUsers(roomId) {
-    return getConnectedBoardClients(roomId).map((client) => client.username || '');
-}
+        const id = payload.data.id
+        res.json({
+            id,
+            gifUrl: `https://media.giphy.com/media/${id}/giphy.gif`,
+            mp4Url: `https://media.giphy.com/media/${id}/giphy.mp4`
+        })
+    } catch (error) {
+        sendGifError(res, error)
+    }
+})
 
 app.get('/api/boards/active', function(req, res) {
-    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Type', 'application/json')
     res.send(JSON.stringify({
         boards: getActiveBoards(),
         updatedAt: new Date().toISOString()
-    }));
-});
+    }))
+})
+
+app.get('/admin/api/session', async function(req, res) {
+    const admin = await getAdminFromRequest(req)
+    res.json({ authenticated: Boolean(admin), username: admin?.username || null })
+})
+
+app.post('/admin/api/login', async function(req, res) {
+    if (!db) {
+        res.status(503).json({ error: 'mongo_unavailable' })
+        return
+    }
+
+    const username = String(req.body?.username || '').trim()
+    const password = String(req.body?.password || '')
+    if (!username || !password) {
+        res.status(400).json({ error: 'missing_credentials' })
+        return
+    }
+
+    const admin = await db.collection('admin_users').findOne({ username })
+    if (!admin || !(await verifyPassword(password, admin.passwordHash))) {
+        res.status(401).json({ error: 'invalid_credentials' })
+        return
+    }
+
+    const token = randomBytes(32).toString('hex')
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + adminSessionTtlSeconds * 1000)
+    await db.collection('admin_sessions').insertOne({
+        token,
+        username,
+        createdAt: now,
+        expiresAt
+    })
+
+    setAdminCookie(res, token, expiresAt)
+    res.json({ authenticated: true, username })
+})
+
+app.post('/admin/api/logout', async function(req, res) {
+    const token = getCookie(req.headers.cookie, adminCookieName)
+    if (token && db) {
+        await db.collection('admin_sessions').deleteOne({ token })
+    }
+    clearAdminCookie(res)
+    res.json({ authenticated: false })
+})
 
 app.use(handler)
 
-// Conexión
-io.on('connection', function(socket) {
-    var chatUser = false;
-    
-    // Recibo desde el cliente el room_id
-    var room_id = socket.handshake.query.room_id;
-    var requestedPrivateBoard = parseBoolean(socket.handshake.query.private, false);
-    // var client_id = socket.client.conn.id;
-    var client_id = socket.id;
-    socket.join(room_id);
-
-    if (!chatConnections[room_id]) chatConnections[room_id] = {qty:0,usernames:[]};
-
-    // Suma una conexion
-    connections++;
-    var boardExisted = Boolean(boards[room_id]);
-    if (boards[room_id]) {
-        boards[room_id].connections++;
-        boards[room_id].lastActiveAt = new Date().toISOString();
-    } else {
-        boards[room_id] = {
-            id: room_id,
-            connections: 1,
-            isPrivate: requestedPrivateBoard,
-            createdAt: new Date().toISOString(),
-            lastActiveAt: new Date().toISOString()
-        };
+io.on('connection', async function(socket) {
+    if (socket.handshake.query?.admin === '1') {
+        await handleAdminConnection(socket)
+        return
     }
-    var boardMeta = boards[room_id];
-    socket.joinAnnouncementSent = false;
 
-    function emitBoardPresence() {
-        io.to(room_id).emit('boardPresence', {
-            roomId: room_id,
-            onlineUsers: boardMeta.connections,
-            users: getBoardUsers(room_id)
-        });
+    handleBoardConnection(socket)
+})
+
+async function handleAdminConnection(socket) {
+    const admin = await getAdminFromCookieHeader(socket.handshake.headers.cookie)
+    if (!admin) {
+        socket.emit('admin:error', { error: 'unauthorized' })
+        socket.disconnect(true)
+        return
     }
+
+    socket.data.admin = admin
+    adminSockets.add(socket)
+    emitAdminStateTo(socket)
+
+    socket.on('admin:erase-board', async function(data, callback) {
+        const board = String(data?.board || '').trim()
+        if (!board) {
+            callback?.({ ok: false, error: 'missing_board' })
+            return
+        }
+
+        try {
+            const deleted = await eraseBoard(board)
+            callback?.({ ok: true, deleted })
+        } catch (err) {
+            console.error(err)
+            callback?.({ ok: false, error: 'erase_failed' })
+        }
+    })
+
+    socket.on('admin:erase-user', async function(data, callback) {
+        const board = String(data?.board || '').trim()
+        const trazosId = String(data?.trazosId || '').trim()
+        if (!board || !trazosId) {
+            callback?.({ ok: false, error: 'missing_user' })
+            return
+        }
+
+        try {
+            const deleted = await eraseUser(board, trazosId)
+            callback?.({ ok: true, deleted })
+        } catch (err) {
+            console.error(err)
+            callback?.({ ok: false, error: 'erase_failed' })
+        }
+    })
+
+    socket.on('admin:update-board-features', async function(data, callback) {
+        const boardId = String(data?.board || '').trim()
+        const board = boards.get(boardId)
+        if (!board) {
+            callback?.({ ok: false, error: 'board_not_found' })
+            return
+        }
+
+        const normalized = normalizeAutoEraseFeature(data?.features?.autoEraseOldTrazos)
+        if (!normalized) {
+            callback?.({ ok: false, error: 'invalid_auto_erase' })
+            return
+        }
+
+        board.features.autoEraseOldTrazos = normalized
+
+        try {
+            const pruned = await pruneBoardIfNeeded(board)
+            scheduleAdminState()
+            callback?.({ ok: true, pruned, features: cloneBoardFeatures(board.features) })
+        } catch (err) {
+            console.error(err)
+            callback?.({ ok: false, error: 'feature_update_failed' })
+        }
+    })
+
+    socket.on('disconnect', function() {
+        adminSockets.delete(socket)
+    })
+}
+
+function handleBoardConnection(socket) {
+    let chatUser = false
+    const roomId = String(socket.handshake.query?.room_id || 'default')
+    const requestedPrivateBoard = parseBoolean(socket.handshake.query?.private, false)
+    const clientId = socket.id
+    const boardExisted = boards.has(roomId)
+    const board = ensureBoard(roomId, requestedPrivateBoard)
+    const parsedUa = uap(socket.request.headers['user-agent'])
+    const user = {
+        socketId: clientId,
+        trazosId: null,
+        board: roomId,
+        username: null,
+        rawEvents: 0,
+        ua: parsedUa.os?.name ? `${parsedUa.os.name} ${parsedUa.os.version || ''}`.trim() : 'Unknown',
+        connected: true,
+        createdAt: new Date(),
+        lastEventAt: null,
+        time: new Date().toTimeString().split(' ')[0]
+    }
+
+    socket.join(roomId)
+    board.sockets.set(clientId, user)
+    board.lastActiveAt = new Date()
+    socket.joinAnnouncementSent = false
+    emitBoardSessionInfo(socket, board, boardExisted)
+    emitBoardPresence(board)
+    scheduleAdminState()
+
+    io.emit('connections', {
+        connections: getOnlineUserCount()
+    })
 
     function setCanvasUsername(rawUsername) {
-        var normalizedUsername = normalizeUsername(rawUsername);
-        if (!normalizedUsername) return '';
-        socket.canvasUsername = normalizedUsername;
-        if (clients.find((el) => el.socketId == socket.id)) {
-            clients.find((el) => el.socketId == socket.id).username = normalizedUsername;
-        }
-        return normalizedUsername;
+        const normalizedUsername = normalizeUsername(rawUsername)
+        if (!normalizedUsername) return ''
+        socket.canvasUsername = normalizedUsername
+        user.username = normalizedUsername
+        return normalizedUsername
     }
 
     function announceBoardJoinIfNeeded(username) {
-        if (!username || socket.joinAnnouncementSent) return;
-        socket.joinAnnouncementSent = true;
-        socket.broadcast.to(room_id).emit('boardUserJoined', {
+        if (!username || socket.joinAnnouncementSent) return
+        socket.joinAnnouncementSent = true
+        socket.broadcast.to(roomId).emit('boardUserJoined', {
             username,
-            onlineUsers: boardMeta.connections
-        });
+            onlineUsers: board.sockets.size
+        })
     }
-
-    socket.emit('boardSessionInfo', {
-        roomId: room_id,
-        onlineUsers: boardMeta.connections,
-        joinedExistingBoard: boardExisted,
-        isPrivate: boardMeta.isPrivate,
-        users: getBoardUsers(room_id)
-    });
-    emitBoardPresence();
-    if (socket.recovered) {
-        // console.log("recuperado pa");
-        log.push(
-            "Usuario "+socket.id+" recuperado en board "+room_id+". Reconexión a las "+new Date().toTimeString().split(' ')[0]
-        );
-        if(clients.find((el) => el.socketId == socket.id)){
-            clients.find((el) => el.socketId == socket.id).connected = true;
-        }
-    }else{
-        log.push(
-            "Usuario "+socket.id+" conectado en board "+room_id+" a las "+new Date().toTimeString().split(' ')[0]
-        );
-    }
-    // console.log('Usuarios conectados: ', connections);
-
-    // Usuario conectado
-    socket.broadcast.emit('connections',{
-        connections: connections
-    });
-
-    // Usuario conectado
-    socket.emit('connections', {
-        connections: connections
-    });
 
     socket.on('clientConnectionEvent', async function(data) {
-        var normalizedUsername = setCanvasUsername(data?.username);
-        clients.push({
-            "socketId" : client_id,
-            "trazosId"  : data.id,
-            "board" : room_id,
-            "lines" : 0,
-            "ua" : uap(socket.request.headers['user-agent']).os,
-            "connected" : true,
-            "time" : new Date().toTimeString().split(' ')[0],
-            "username" : normalizedUsername
-        })
+        user.trazosId = data?.id == null ? null : String(data.id)
+        const normalizedUsername = setCanvasUsername(data?.username)
+        emitBoardPresence(board)
+        announceBoardJoinIfNeeded(normalizedUsername)
+        scheduleAdminState()
 
-        emitBoardPresence();
-        announceBoardJoinIfNeeded(normalizedUsername);
-        // clients[client_id] = data.id;
-        // console.log("Se conecto el usuario " + data.id);
-
-        // Enviar las lineas pasadas cuando el usuario se conecta
-        if(memoryReady()){
-            var replayQuery = db.collection(mongoCollectionName)
-                .find({"board":room_id})
+        if (memoryReady()) {
+            let replayQuery = db.collection(linesCollectionName)
+                .find({ board: roomId })
                 .project({ _id: 0, data: 1, timestamp: 1 })
-                .sort({ timestamp: 1 });
-            if (replayLimit > 0) replayQuery = replayQuery.limit(replayLimit);
-            const boardLines = await replayQuery.toArray();
-            if(boardLines.length){
-                socket.emit("previousLines",boardLines);
+                .sort({ timestamp: 1 })
+
+            if (replayLimit > 0) replayQuery = replayQuery.limit(replayLimit)
+            const boardLines = await replayQuery.toArray()
+            if (boardLines.length) {
+                socket.emit('previousLines', boardLines)
             }
         }
-
-    });
+    })
 
     socket.on('setCanvasUsername', function(data) {
-        var normalizedUsername = setCanvasUsername(data?.username);
-        emitBoardPresence();
-        announceBoardJoinIfNeeded(normalizedUsername);
-    });
+        const normalizedUsername = setCanvasUsername(data?.username)
+        emitBoardPresence(board)
+        announceBoardJoinIfNeeded(normalizedUsername)
+        scheduleAdminState()
+    })
 
-    // Mensaje del chat
     socket.on('new message', function (data) {
-        socket.broadcast.to(room_id).emit('new message', {
+        socket.broadcast.to(roomId).emit('new message', {
             username: socket.username,
             text: data
-        });
-    });
+        })
+    })
 
-    // Nuevo usuario al chat
     socket.on('add user', function (username) {
-        if (chatUser) return;
-        // we store the username in the socket session for this client
-        socket.username = normalizeUsername(username);
-        if (!socket.username) return;
-        var normalizedUsername = setCanvasUsername(socket.username);
-        emitBoardPresence();
-        announceBoardJoinIfNeeded(normalizedUsername);
-        ++chatConnections[room_id].qty;
-        chatConnections[room_id].usernames.push(socket.username);
-        console.log('Usuarios conectados al chat: ', chatConnections[room_id].qty);
-        console.log("Se conecto al chat el usuario " + socket.username);
-        chatUser = true;
+        if (chatUser) return
+        socket.username = normalizeUsername(username)
+        if (!socket.username) return
+        const normalizedUsername = setCanvasUsername(socket.username)
+        chatUser = true
+        board.chatUsernames.push(socket.username)
+        emitBoardPresence(board)
+        announceBoardJoinIfNeeded(normalizedUsername)
+
         socket.emit('chat login', {
             username: socket.username,
-            numUsers: chatConnections[room_id].qty,
-            usernames: chatConnections[room_id].usernames
-        });
-        // echo globally (all clients) that a person has connected
-        socket.broadcast.to(room_id).emit('user joined', {
+            numUsers: board.chatUsernames.length,
+            usernames: board.chatUsernames
+        })
+        socket.broadcast.to(roomId).emit('user joined', {
             username: socket.username,
-            numUsers: chatConnections[room_id].qty,
-            usernames: chatConnections[room_id].usernames
-        });
-    });
+            numUsers: board.chatUsernames.length,
+            usernames: board.chatUsernames
+        })
+        scheduleAdminState()
+    })
 
-    // when the client emits 'typing', we broadcast it to others
     socket.on('typing', function () {
-        socket.broadcast.to(room_id).emit('typing', {
+        socket.broadcast.to(roomId).emit('typing', {
             username: socket.username
-        });
-    });
+        })
+    })
 
-    // when the client emits 'stop typing', we broadcast it to others
     socket.on('stop typing', function () {
-        socket.broadcast.to(room_id).emit('stop typing', {
+        socket.broadcast.to(roomId).emit('stop typing', {
             username: socket.username
-        });
-    });
+        })
+    })
 
-    // Movimiento del puntero
-    // socket.on('mousemove', function(data) {
-    //     socket.broadcast.to(room_id).emit('move', data);
-    // });
+    socket.on('externalMouseEvent', async function(data) {
+        const now = new Date()
+        const event = data?.e
+        const layer = Number(data?.layer || 0)
+        const trazosId = data?.id == null ? user.trazosId : String(data.id)
+        if (trazosId && !user.trazosId) user.trazosId = trazosId
+        debugSocketEvent('receive', roomId, clientId, data)
 
-    // Movimiento de los trazos
-    socket.on('externalMouseEvent',async function(data) {
-        
-        // Guardar lineas
-        if(memoryReady()){
-            const strokeOwnerId = data.id ?? client_id;
-            db.collection(mongoCollectionName).insertOne({
-                board:room_id,
-                id: data.gesture_id,
-                data:data,
-                layer:data.layer,
-                user:strokeOwnerId,
-                timestamp:new Date()
-            });
+        trackActiveStroke(board, event, trazosId, layer, clientId)
+        board.lastActiveAt = now
+        board.lastEventAt = now
+        user.lastEventAt = now
+
+        socket.broadcast.to(roomId).emit('externalMouseEvent', data)
+        debugSocketEvent('broadcast', roomId, clientId, data)
+
+        if (memoryReady()) {
+            try {
+                await db.collection(linesCollectionName).insertOne({
+                    board: roomId,
+                    id: data?.gesture_id,
+                    data,
+                    event,
+                    layer,
+                    trazosId,
+                    socketId: clientId,
+                    user: trazosId || clientId,
+                    timestamp: now
+                })
+                if (event === 'RELEASED') await pruneBoardIfNeeded(board)
+            } catch (err) {
+                console.error('Failed to persist board event:', err)
+            }
         }
-        socket.broadcast.to(room_id).emit('externalMouseEvent',data);
-        if(clients.find((el) => el.socketId == socket.id)){
-            clients.find((el) => el.socketId == socket.id).lines++;
+
+        user.rawEvents++
+        scheduleAdminState()
+    })
+
+    socket.on('deleteEvent', async function(data) {
+        socket.broadcast.to(roomId).emit('deleteEvent', data)
+
+        if (memoryReady()) {
+            const strokeOwnerId = data?.id == null ? user.trazosId : String(data.id)
+            await db.collection(linesCollectionName).deleteMany({
+                board: roomId,
+                layer: Number(data?.layer || 0),
+                $or: [
+                    { trazosId: strokeOwnerId },
+                    { user: strokeOwnerId },
+                    { 'data.id': strokeOwnerId }
+                ]
+            })
         }
+        scheduleAdminState()
+    })
 
-        // Borrar lineas viejas cuando pasa los 500
-
-        // // console.log( await db.collection("lines").count({board:room_id}));
-        // while(await db.collection("lines").count({board:room_id}) > 500){
-        //     var oldestLine = await db.collection("lines").findOne({ board : room_id },{sort:{ timestamp : 1 }});
-        //     await db.collection("lines").deleteMany({
-        //         board:room_id,
-        //         id: oldestLine.id
-        //     });
-        //     var del = {
-        //         'layer': oldestLine.layer,
-        //         'user_id': oldestLine.data.id,
-        //         'gesture_id': oldestLine.id
-        //     }
-        //     // console.log(del); SACAR EL BROADCAST para enviar tambien a quien dibuja
-        //     socket.broadcast.to(room_id).emit('deleteEvent', del);
-        //     // console.log("Borro "+oldestLine.id);
-        // }
-    });
-
-    socket.on('deleteEvent', function(data) {
-        socket.broadcast.to(room_id).emit('deleteEvent', data);
-        
-        // Borrar lineas 
-        if(memoryReady()){
-            const strokeOwnerId = data.id ?? client_id;
-            db.collection(mongoCollectionName).deleteMany({
-                board:room_id,
-                user:strokeOwnerId,
-                layer:data.layer
-            });
-        }
-    });
-
-    // Desconexion de un cliente
     socket.on('disconnect', function() {
-        if(chatUser){
-            chatConnections[room_id].qty--;
-            for (var i=chatConnections[room_id].usernames.length-1; i>=0; i--) {
-                if (chatConnections[room_id].usernames[i] === socket.username) {
-                    chatConnections[room_id].usernames.splice(i, 1);
-                    // break;       //<-- Uncomment  if only the first term has to be removed
-                }
+        if (chatUser) {
+            board.chatUsernames = board.chatUsernames.filter((name) => name !== socket.username)
+            socket.broadcast.to(roomId).emit('chat logout', {
+                numUsers: board.chatUsernames.length,
+                usernames: board.chatUsernames
+            })
+        }
+
+        const disconnectedTrazosId = user.trazosId
+        eraseDisconnectedUserTrazos(board, disconnectedTrazosId).catch((error) => {
+            console.error('Failed to erase disconnected user trazos:', error)
+        })
+        clearSocketActiveStrokes(board, clientId)
+        board.sockets.delete(clientId)
+        board.lastActiveAt = new Date()
+        emitBoardPresence(board)
+        if (board.sockets.size < 1) {
+            if (memoryReady()) {
+                db.collection(linesCollectionName).deleteMany({ board: roomId })
             }
-            socket.broadcast.to(room_id).emit('chat logout', {
-                numUsers: chatConnections[room_id].qty,
-                usernames: chatConnections[room_id].usernames
-            });
-        }
-        connections--;
-        
-        // if(clients.length > 0) console.log("Se desconecto el usuario " + clients[client_id]);
-
-        console.log('Usuarios conectados: ', connections);
-        
-        socket.broadcast.emit('user_disconnected', {
-            connections: connections
-        });
-        // socket.broadcast.to(room_id).emit('deleteEvent', {
-        //     username: socket.username,
-        //     connections: connections
-        // });
-       
-        // Delete all gestures from this client
-
-        // var id = clients[client_id];
-        // for (var i = 0; i < 4; i++) {
-        //     var del = {
-        //         'layer': i,
-        //         'id': id
-        //     }
-        //     socket.broadcast.to(room_id).emit("deleteEvent", del);
-        //     db.collection("lines").deleteMany({"user":client_id});
-        // }
-        if (boards[room_id]) {
-            boards[room_id].connections = Math.max(0, boards[room_id].connections - 1);
-            boards[room_id].lastActiveAt = new Date().toISOString();
+            boards.delete(roomId)
         }
 
-        // Si no quedan mas usuarios borrar todas las lineas
-        if(boards[room_id] && boards[room_id].connections < 1){
-            if(memoryReady()){
-                db.collection(mongoCollectionName).deleteMany({"board":room_id});
-            }
-        }
-        if (boards[room_id]) emitBoardPresence();
-        
-        
-        // delete clients[client_id];
-        log.push(
-            "Usuario "+socket.id+" desconectado en board "+room_id+" a las "+new Date().toTimeString().split(' ')[0]
-        );
-        // console.dir(socket.id);
-        if(clients.find((el) => el.socketId == socket.id)){
-            clients.find((el) => el.socketId == socket.id).connected = false ;
-        }
-    });
-
-
-});
-
-
-function saveImage(rawData) {
-    var regex = /^data:.+\/(.+);base64,(.*)$/;
-
-    var matches = rawData.match(regex);
-    var ext = matches[1];
-    var data = matches[2];
-    var buffer = new Buffer(data, 'base64');
-    const publicDir = 'public';
-    const usrImgDir = 'user-img';
-    const pubUserImgDir = publicDir + '/' + usrImgDir;
-    var filename = usrImgDir + '/' + uuidv4() + '.' + ext;
-    mkdirp.sync(pubUserImgDir);
-    writeFile(publicDir + '/' + filename, buffer, function(err) {
-        if (err) throw err;
-    });
-    return filename;
+        io.emit('user_disconnected', {
+            connections: getOnlineUserCount()
+        })
+        scheduleAdminState()
+    })
 }
 
+function ensureBoard(boardId, isPrivate = false) {
+    if (!boards.has(boardId)) {
+        const now = new Date()
+        boards.set(boardId, {
+            id: boardId,
+            isPrivate,
+            createdAt: now,
+            lastActiveAt: now,
+            lastEventAt: null,
+            sockets: new Map(),
+            activeStrokes: new Map(),
+            chatUsernames: [],
+            features: defaultBoardFeatures()
+        })
+    }
+    return boards.get(boardId)
+}
 
-function writeLogTable(){
-    var structDatas = [];
-        // { handler: 'http', endpoint: 'http://localhost:3000/path', method: 'ALL' },
-        // { handler: 'event', endpoint: 'http://localhost:3000/event', method: 'POST' },
-        // { handler: 'GCS', endpoint: 'http://localhost:3000/GCS', method: 'POST' }
-    
-    for(var i=0; i < clients.length; i++){
-        structDatas.push({
-            "Board": clients[i].board,
-            "User Agent": clients[i].ua,
-            "Socket ID" : clients[i].socketId,
-            "Trazos ID": clients[i].trazosId,
-            "Gestures": clients[i].lines,
-            "Connected": clients[i].connected,
-            "Last connection": clients[i].time,
-        });
+function defaultBoardFeatures() {
+    return {
+        autoEraseOldTrazos: {
+            enabled: false,
+            maxTrazos: autoEraseDefaultMaxTrazos
+        }
+    }
+}
+
+function cloneBoardFeatures(features) {
+    return {
+        autoEraseOldTrazos: {
+            enabled: Boolean(features?.autoEraseOldTrazos?.enabled),
+            maxTrazos: Number(features?.autoEraseOldTrazos?.maxTrazos || autoEraseDefaultMaxTrazos)
+        }
+    }
+}
+
+function normalizeAutoEraseFeature(feature) {
+    if (!feature || typeof feature !== 'object') return null
+    const maxTrazos = Number(feature.maxTrazos)
+    if (!Number.isInteger(maxTrazos) || maxTrazos < 1 || maxTrazos > autoEraseMaxTrazosLimit) {
+        return null
     }
 
-    // clients.forEach((client)=>{
-    //     structDatas.push({ handler: 'http', endpoint: 'http://localhost:3000/path', method: 'ALL' });
-    // })
-    console.dir(log);
-    console.table(structDatas,["Board","User Agent","Socket ID","Trazos ID","Gestures","Connected","Last connection"]);
-    
+    return {
+        enabled: Boolean(feature.enabled),
+        maxTrazos
+    }
+}
+
+function getActiveBoards() {
+    return Array.from(boards.values())
+        .filter((board) => board && !board.isPrivate && board.sockets.size > 0)
+        .sort((a, b) => {
+            if (b.sockets.size !== a.sockets.size) return b.sockets.size - a.sockets.size
+            return String(b.lastActiveAt || '').localeCompare(String(a.lastActiveAt || ''))
+        })
+        .map((board) => ({
+            id: board.id,
+            connections: board.sockets.size
+        }))
+}
+
+function getOnlineUserCount() {
+    let count = 0
+    for (const board of boards.values()) {
+        count += board.sockets.size
+    }
+    return count
+}
+
+function getBoardUsernames(board) {
+    return Array.from(board.sockets.values())
+        .map((user) => user.username)
+        .filter(Boolean)
+}
+
+function emitBoardPresence(board) {
+    io.to(board.id).emit('boardPresence', {
+        roomId: board.id,
+        onlineUsers: board.sockets.size,
+        users: getBoardUsernames(board)
+    })
+}
+
+function emitBoardSessionInfo(socket, board, boardExisted) {
+    socket.emit('boardSessionInfo', {
+        roomId: board.id,
+        onlineUsers: board.sockets.size,
+        joinedExistingBoard: boardExisted,
+        isPrivate: board.isPrivate,
+        users: getBoardUsernames(board)
+    })
+}
+
+function trackActiveStroke(board, event, trazosId, layer, socketId) {
+    if (!trazosId) return
+    const key = `${socketId}:${trazosId}:${layer}`
+    if (event === 'PRESS') {
+        board.activeStrokes.set(key, { socketId, trazosId, layer })
+    }
+    if (event === 'RELEASED') {
+        board.activeStrokes.delete(key)
+    }
+}
+
+function clearSocketActiveStrokes(board, socketId) {
+    for (const [key, stroke] of board.activeStrokes.entries()) {
+        if (stroke.socketId === socketId) {
+            board.activeStrokes.delete(key)
+        }
+    }
+}
+
+async function eraseDisconnectedUserTrazos(board, trazosId) {
+    if (!board || !trazosId) return 0
+
+    emitDeleteForUser(board.id, trazosId)
+
+    for (const [key, stroke] of board.activeStrokes.entries()) {
+        if (stroke.trazosId === trazosId) board.activeStrokes.delete(key)
+    }
+
+    if (!memoryReady()) return 0
+
+    const result = await db.collection(linesCollectionName).deleteMany({
+        board: board.id,
+        $or: [
+            { trazosId },
+            { user: trazosId },
+            { 'data.id': trazosId }
+        ]
+    })
+
+    return result.deletedCount
+}
+
+async function buildAdminState() {
+    const onlineBoards = Array.from(boards.values()).filter((board) => board.sockets.size > 0)
+    const boardIds = onlineBoards.map((board) => board.id)
+    const stats = await loadLineStats(boardIds)
+
+    const boardStates = onlineBoards.map((board) => {
+        const boardStats = stats.boards.get(board.id) || emptyStats()
+        const users = Array.from(board.sockets.values()).map((user) => {
+            const trazosId = user.trazosId || ''
+            const userStats = stats.users.get(`${board.id}:${trazosId}`) || emptyStats()
+            const activeStroke = Array.from(board.activeStrokes.values())
+                .some((stroke) => stroke.socketId === user.socketId)
+
+            return {
+                displayName: user.username || user.trazosId || user.socketId,
+                trazosId: user.trazosId,
+                socketId: user.socketId,
+                ua: user.ua,
+                connected: user.connected,
+                activeStroke,
+                createdAt: user.createdAt.toISOString(),
+                lastEventAt: user.lastEventAt?.toISOString() || userStats.lastEventAt?.toISOString() || null,
+                completedStrokes: userStats.completed,
+                rawEvents: userStats.raw,
+                layers: userStats.layers
+            }
+        })
+
+        return {
+            id: board.id,
+            onlineUsers: users.length,
+            activeStrokes: board.activeStrokes.size,
+            createdAt: board.createdAt.toISOString(),
+            lastEventAt: board.lastEventAt?.toISOString() || boardStats.lastEventAt?.toISOString() || null,
+            completedStrokes: boardStats.completed,
+            rawEvents: boardStats.raw,
+            layers: boardStats.layers,
+            features: cloneBoardFeatures(board.features),
+            users
+        }
+    }).sort((a, b) => b.onlineUsers - a.onlineUsers || a.id.localeCompare(b.id))
+
+    const totals = boardStates.reduce((acc, board) => {
+        acc.onlineBoards++
+        acc.onlineUsers += board.onlineUsers
+        acc.activeStrokes += board.activeStrokes
+        acc.completedStrokes += board.completedStrokes
+        acc.rawEvents += board.rawEvents
+        return acc
+    }, {
+        onlineBoards: 0,
+        onlineUsers: 0,
+        activeStrokes: 0,
+        completedStrokes: 0,
+        rawEvents: 0
+    })
+
+    return {
+        generatedAt: new Date().toISOString(),
+        totals,
+        boards: boardStates
+    }
+}
+
+async function loadLineStats(boardIds) {
+    const result = {
+        boards: new Map(),
+        users: new Map()
+    }
+    if (!db || boardIds.length < 1) return result
+
+    const rows = await db.collection(linesCollectionName).aggregate([
+        { $match: { board: { $in: boardIds } } },
+        {
+            $project: {
+                board: 1,
+                event: { $ifNull: ['$event', '$data.e'] },
+                layer: { $ifNull: ['$layer', '$data.layer'] },
+                trazosId: { $ifNull: ['$trazosId', '$data.id'] },
+                timestamp: 1
+            }
+        },
+        {
+            $facet: {
+                boards: [
+                    {
+                        $group: {
+                            _id: { board: '$board', layer: '$layer' },
+                            raw: { $sum: 1 },
+                            lastEventAt: { $max: '$timestamp' },
+                            completed: {
+                                $sum: { $cond: [{ $eq: ['$event', 'RELEASED'] }, 1, 0] }
+                            }
+                        }
+                    }
+                ],
+                users: [
+                    {
+                        $group: {
+                            _id: { board: '$board', trazosId: '$trazosId', layer: '$layer' },
+                            raw: { $sum: 1 },
+                            lastEventAt: { $max: '$timestamp' },
+                            completed: {
+                                $sum: { $cond: [{ $eq: ['$event', 'RELEASED'] }, 1, 0] }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ]).toArray()
+
+    const facets = rows[0] || { boards: [], users: [] }
+    for (const row of facets.boards) {
+        const stats = ensureStats(result.boards, row._id.board)
+        addLayerStats(stats, row._id.layer, row.raw, row.completed, row.lastEventAt)
+    }
+    for (const row of facets.users) {
+        if (!row._id.trazosId) continue
+        const stats = ensureStats(result.users, `${row._id.board}:${row._id.trazosId}`)
+        addLayerStats(stats, row._id.layer, row.raw, row.completed, row.lastEventAt)
+    }
+
+    return result
+}
+
+function emptyStats() {
+    return {
+        raw: 0,
+        completed: 0,
+        lastEventAt: null,
+        layers: [0, 0, 0, 0]
+    }
+}
+
+function ensureStats(map, key) {
+    if (!map.has(key)) map.set(key, emptyStats())
+    return map.get(key)
+}
+
+function addLayerStats(stats, layer, raw, completed, lastEventAt) {
+    const layerIndex = Number(layer || 0)
+    stats.raw += raw
+    stats.completed += completed
+    if (lastEventAt && (!stats.lastEventAt || lastEventAt > stats.lastEventAt)) {
+        stats.lastEventAt = lastEventAt
+    }
+    if (layerIndex >= 0 && layerIndex < stats.layers.length) {
+        stats.layers[layerIndex] += completed
+    }
+}
+
+function scheduleAdminState() {
+    if (adminStateTimer) return
+    adminStateTimer = setTimeout(async () => {
+        adminStateTimer = null
+        await emitAdminState()
+    }, 100)
+}
+
+async function emitAdminState() {
+    if (adminSockets.size < 1) return
+    const state = await buildAdminState()
+    for (const socket of adminSockets) {
+        socket.emit('admin:state', state)
+    }
+}
+
+async function emitAdminStateTo(socket) {
+    socket.emit('admin:state', await buildAdminState())
+}
+
+async function eraseBoard(board) {
+    if (!db) throw new Error('mongo_unavailable')
+    const pairs = await getAffectedPairs({ board })
+    const result = await db.collection(linesCollectionName).deleteMany({ board })
+    emitDeletePairs(board, pairs)
+    const boardState = boards.get(board)
+    if (boardState) boardState.activeStrokes.clear()
+    scheduleAdminState()
+    return result.deletedCount
+}
+
+async function eraseUser(board, trazosId) {
+    if (!db) throw new Error('mongo_unavailable')
+    const pairs = await getAffectedPairs({ board }, trazosId)
+    const result = await db.collection(linesCollectionName).deleteMany({
+        board,
+        $or: [
+            { trazosId },
+            { user: trazosId },
+            { 'data.id': trazosId }
+        ]
+    })
+    emitDeletePairs(board, pairs)
+
+    const boardState = boards.get(board)
+    if (boardState) {
+        for (const [key, stroke] of boardState.activeStrokes.entries()) {
+            if (stroke.trazosId === trazosId) boardState.activeStrokes.delete(key)
+        }
+    }
+    scheduleAdminState()
+    return result.deletedCount
+}
+
+async function pruneBoardIfNeeded(board) {
+    if (!memoryReady() || !board?.features?.autoEraseOldTrazos?.enabled) return 0
+
+    const maxTrazos = Number(board.features.autoEraseOldTrazos.maxTrazos)
+    if (!Number.isInteger(maxTrazos) || maxTrazos < 1) return 0
+
+    const rows = await db.collection(linesCollectionName).aggregate([
+        {
+            $match: {
+                board: board.id,
+                event: 'RELEASED'
+            }
+        },
+        {
+            $project: {
+                gestureId: { $ifNull: ['$id', '$data.gesture_id'] },
+                layer: { $ifNull: ['$layer', '$data.layer'] },
+                ownerId: { $ifNull: ['$trazosId', '$data.id'] },
+                timestamp: 1
+            }
+        },
+        {
+            $match: {
+                gestureId: { $nin: [null, ''] }
+            }
+        },
+        { $sort: { timestamp: -1 } },
+        { $skip: maxTrazos }
+    ]).toArray()
+
+    if (rows.length < 1) return 0
+
+    const staleGestureIds = rows.map((row) => row.gestureId)
+    const result = await db.collection(linesCollectionName).deleteMany({
+        board: board.id,
+        $or: [
+            { id: { $in: staleGestureIds } },
+            { 'data.gesture_id': { $in: staleGestureIds } }
+        ]
+    })
+
+    for (const row of rows) {
+        io.to(board.id).emit('deleteEvent', {
+            layer: Number(row.layer || 0),
+            id: String(row.ownerId || ''),
+            gesture_id: String(row.gestureId)
+        })
+    }
+
+    return result.deletedCount
+}
+
+async function getAffectedPairs(match, trazosId = null) {
+    const pipeline = [
+        { $match: match },
+        {
+            $project: {
+                layer: { $ifNull: ['$layer', '$data.layer'] },
+                trazosId: { $ifNull: ['$trazosId', '$data.id'] }
+            }
+        }
+    ]
+    if (trazosId) pipeline.push({ $match: { trazosId } })
+    pipeline.push({
+        $group: {
+            _id: {
+                layer: '$layer',
+                trazosId: '$trazosId'
+            }
+        }
+    })
+
+    const rows = await db.collection(linesCollectionName).aggregate(pipeline).toArray()
+    return rows
+        .filter((row) => row._id.trazosId != null && row._id.layer != null)
+        .map((row) => ({
+            layer: Number(row._id.layer),
+            id: String(row._id.trazosId)
+        }))
+}
+
+function emitDeletePairs(board, pairs) {
+    for (const pair of pairs) {
+        io.to(board).emit('deleteEvent', pair)
+    }
+}
+
+function emitDeleteForUser(board, trazosId) {
+    for (let layer = 0; layer < boardLayerCount; layer++) {
+        io.to(board).emit('deleteEvent', {
+            layer,
+            id: trazosId
+        })
+    }
+}
+
+function memoryReady() {
+    return memoryEnabled && db !== null
+}
+
+function parseBoolean(value, defaultValue) {
+    if (value == null) return defaultValue
+    return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase())
+}
+
+function parseNumber(value, defaultValue) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : defaultValue
+}
+
+function normalizeUsername(value) {
+    if (typeof value !== 'string') return ''
+    return value.trim().slice(0, 40)
+}
+
+function debugSocketEvent(action, roomId, socketId, data) {
+    if (!debugTrazosSocket) return
+    console.log('[trazos-socket]', action, {
+        roomId,
+        socketId,
+        event: data?.e,
+        id: data?.id,
+        gestureId: data?.gesture_id,
+        layer: data?.layer,
+        x: data?.x,
+        y: data?.y
+    })
+}
+
+function parseCookies(header = '') {
+    return header.split(';').reduce((cookies, item) => {
+        const index = item.indexOf('=')
+        if (index < 0) return cookies
+        const key = item.slice(0, index).trim()
+        const value = item.slice(index + 1).trim()
+        cookies[key] = decodeURIComponent(value)
+        return cookies
+    }, {})
+}
+
+function getCookie(header, name) {
+    return parseCookies(header || '')[name]
+}
+
+async function getAdminFromRequest(req) {
+    return getAdminFromCookieHeader(req.headers.cookie)
+}
+
+async function getAdminFromCookieHeader(cookieHeader) {
+    if (!db) return null
+    const token = getCookie(cookieHeader, adminCookieName)
+    if (!token) return null
+
+    const session = await db.collection('admin_sessions').findOne({
+        token,
+        expiresAt: { $gt: new Date() }
+    })
+    if (!session) return null
+    return { username: session.username }
+}
+
+function setAdminCookie(res, token, expiresAt) {
+    const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
+    res.setHeader('Set-Cookie', `${adminCookieName}=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax`)
+}
+
+function clearAdminCookie(res) {
+    res.setHeader('Set-Cookie', `${adminCookieName}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`)
+}
+
+async function verifyPassword(password, passwordHash) {
+    const [salt, storedHash] = String(passwordHash || '').split(':')
+    if (!salt || !storedHash) return false
+    const derived = await scrypt(password, salt, 64)
+    const stored = Buffer.from(storedHash, 'hex')
+    if (stored.length !== derived.length) return false
+    return timingSafeEqual(stored, derived)
+}
+
+async function saveTemporaryGif(rawData) {
+    return saveGifDataUrl(rawData, {
+        directory: gifTempDir,
+        urlPrefix: gifUrlPrefix,
+        maxBytes: gifMaxBytes
+    })
+}
+
+function sendGifError(res, error) {
+    const status = Number(error?.statusCode || error?.status || 500)
+    const safeStatus = status >= 400 && status < 600 ? status : 500
+    const message = safeStatus === 500 ? 'gif_processing_failed' : error.message
+    if (safeStatus === 500) console.error(error)
+    res.status(safeStatus).json({ error: message })
+}
+
+function getRequestBaseUrl(req) {
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
+    const proto = forwardedProto || req.protocol
+    return `${proto}://${req.get('host')}`
+}
+
+function scheduleGifCleanup() {
+    const runCleanup = async () => {
+        try {
+            await cleanupOldGifFiles(gifTempDir, gifTempTtlMs)
+        } catch (error) {
+            console.error('Failed to clean up temporary GIF files:', error)
+        }
+    }
+
+    runCleanup()
+    setInterval(runCleanup, gifCleanupIntervalMs).unref()
+}
+
+async function initDB() {
+    if (!memoryEnabled) return
+    mongoClient = new MongoClient(mongoUrl)
+    await mongoClient.connect()
+    db = mongoClient.db(dbName)
+    await ensureIndex(db.collection('admin_sessions'), { expiresAt: 1 }, {
+        expireAfterSeconds: 0,
+        name: 'admin_sessions_expires_at_idx'
+    })
+    await ensureIndex(db.collection('admin_users'), { username: 1 }, {
+        unique: true,
+        name: 'admin_users_username_idx'
+    })
+    await ensureIndex(db.collection(linesCollectionName), { board: 1, timestamp: 1 }, {
+        name: 'board_timestamp_idx'
+    })
+    await ensureIndex(db.collection(linesCollectionName), { board: 1, user: 1, layer: 1 }, {
+        name: 'board_user_layer_idx'
+    })
+    await ensureIndex(db.collection(linesCollectionName), { board: 1, trazosId: 1, layer: 1 }, {
+        name: 'board_trazos_layer_idx'
+    })
+    await ensureIndex(db.collection(linesCollectionName), { timestamp: 1 }, {
+        name: 'timestamp_ttl_idx',
+        expireAfterSeconds: memoryTtlSeconds
+    })
+    console.log('Connected successfully to Mongo')
+    console.log('Mongo running on: ' + mongoUrl)
+}
+
+async function ensureIndex(collection, keys, options) {
+    try {
+        await collection.createIndex(keys, options)
+    } catch (err) {
+        if (err?.code !== 85) throw err
+
+        const existingIndexes = await collection.indexes()
+        const matchingIndex = existingIndexes.find((index) => {
+            return JSON.stringify(index.key) === JSON.stringify(keys)
+        })
+        if (!matchingIndex) throw err
+    }
 }
 
 async function startServer() {
-    if(MEMORY_ENABLED) {
+    scheduleGifCleanup()
+
+    if (memoryEnabled) {
         try {
-            await initDB();
-            await ensureMemoryIndexes();
+            await initDB()
         } catch (error) {
-            console.error('Failed to initialize Mongo memory:', error);
-            process.exit(1);
+            console.error('Failed to initialize Mongo memory:', error)
+            process.exit(1)
         }
     } else {
-        console.log('Board memory disabled (TRAZOS_MEMORY_ENABLED=false)');
+        console.log('Board memory disabled (TRAZOS_MEMORY_ENABLED=false)')
     }
 
     server.listen(port, () => {
-        console.log('Running on *:'+port);
-    });
-
-    // setInterval(function () {
-    //     console.clear();
-    //     writeLogTable();
-    // }, 1000);
+        console.log('Running on *:' + port)
+    })
 }
 
-startServer();
+startServer()
