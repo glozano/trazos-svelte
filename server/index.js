@@ -6,6 +6,7 @@ import { handler } from '../build/handler.js'
 import console from 'console'
 import uap from 'ua-parser-js'
 import path from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { MongoClient } from 'mongodb'
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
@@ -76,11 +77,11 @@ app.post('/api/gifs/giphy', express.text({ type: '*/*', limit: gifMaxBytes }), a
 
     try {
         const saved = await saveTemporaryGif(req.body)
-        const sourceImageUrl = `${getRequestBaseUrl(req)}${saved.urlPath}`
+        const gifFile = await readFile(saved.path)
         const formData = new FormData()
         formData.append('api_key', giphyApiKey)
         formData.append('username', giphyUsername)
-        formData.append('source_image_url', sourceImageUrl)
+        formData.append('file', new Blob([gifFile], { type: 'image/gif' }), saved.filename)
         formData.append('tags', giphyTags)
 
         const response = await fetch('https://upload.giphy.com/v1/gifs', {
@@ -991,12 +992,6 @@ function sendGifError(res, error) {
     const message = safeStatus === 500 ? 'gif_processing_failed' : error.message
     if (safeStatus === 500) console.error(error)
     res.status(safeStatus).json({ error: message })
-}
-
-function getRequestBaseUrl(req) {
-    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
-    const proto = forwardedProto || req.protocol
-    return `${proto}://${req.get('host')}`
 }
 
 function scheduleGifCleanup() {
