@@ -130,7 +130,7 @@
           { label: 'Trazos gif animation channel', href: 'https://giphy.com/channel/trazosclub' },
           {
             label: 'Download Trazos Club tutorial',
-            href: 'https://drive.google.com/file/d/1jazTb6eqf9TTfjj9-q-SY8PuYl1UT9-2/view?usp=sharing'
+            href: 'https://drive.google.com/file/d/1SsDKHS03XddLnJVDO0JygWJn2aS-v9ae/view?usp=sharing'
           },
           { label: 'Access source code', href: 'https://github.com/andiamo/fideos' }
         ],
@@ -141,7 +141,7 @@
           },
           {
             label: 'Download Andiamo tutorial',
-            href: 'https://drive.google.com/file/d/1QABjEdGDP2fLWgBf3pu6e_8ShUoCFpjt/view?usp=sharing'
+            href: 'https://drive.google.com/file/d/10DBxATUSMJvecLIVIziXQrE0rIlqa_Ks/view?usp=sharing'
           },
           { label: 'Source code on GitHub', href: 'https://github.com/andiamo/andiamo' }
         ]

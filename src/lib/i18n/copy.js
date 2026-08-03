@@ -85,6 +85,10 @@ export const copy = {
         {
           title: 'Actividades colaborativas',
           subtitle: 'Formatos participativos para instituciones y comunidades.'
+        },
+        {
+          title: 'Cursos virtuales',
+          subtitle: 'Formación online en vivo sobre dibujo colectivo animado.'
         }
       ],
       closing:
@@ -166,6 +170,7 @@ export const copy = {
         talleres: 'Talleres',
         eventos: 'Eventos',
         actividades_colaborativas: 'Actividades colaborativas',
+        cursos_virtuales: 'Cursos virtuales',
         desarrollos_tecnologicos: 'Desarrollos tecnológicos',
         comunidad: 'Comunidad',
         colaborar: 'Quiero colaborar',
@@ -265,6 +270,10 @@ export const copy = {
         {
           title: 'Collaborative activities',
           subtitle: 'Participatory formats for institutions and communities.'
+        },
+        {
+          title: 'Virtual courses',
+          subtitle: 'Live online training on animated collective drawing.'
         }
       ],
       closing:
@@ -346,6 +355,7 @@ export const copy = {
         talleres: 'Workshops',
         eventos: 'Events',
         actividades_colaborativas: 'Collaborative activities',
+        cursos_virtuales: 'Virtual courses',
         desarrollos_tecnologicos: 'Technology developments',
         comunidad: 'Community',
         colaborar: 'I want to collaborate',

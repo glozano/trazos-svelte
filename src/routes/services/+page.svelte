@@ -5,29 +5,56 @@
   import workshopImage from '$lib/images/services/services-workshop.jpeg';
   import performanceImage from '$lib/images/services/services-perfo.jpeg';
   import activityImage from '$lib/images/services/services-activity.jpeg';
+  import virtualImage from '$lib/images/services/services-virtual.jpeg';
   import { copy } from '$lib/i18n/copy';
   import { languageStore } from '$lib/stores/languageStore';
 
+  // Presentation PDFs per language (Spanish / English versions on Google Drive).
+  const presentationLinks = [
+    {
+      es: 'https://drive.google.com/file/d/1T1ZsfmctS5gUi-7HYe0DtBfGGciCsj0g/view?usp=sharing',
+      en: 'https://drive.google.com/file/d/1DnSJH3IUonfMpkXbZfDBx0bDIz59E79C/view?usp=sharing'
+    },
+    {
+      es: 'https://drive.google.com/file/d/1GWz7d7x6X80zHDbshQl1WJVXM4dW_k31/view?usp=sharing',
+      en: 'https://drive.google.com/file/d/1lWdEj8xQV1R1sFFn5AfNx113KS014pcw/view?usp=sharing'
+    },
+    {
+      es: 'https://drive.google.com/file/d/1Sd0pqqVF2p180yhipRQc2FhEhn8Q5Are/view?usp=sharing',
+      en: 'https://drive.google.com/file/d/1ab5bVRgYnFL-eoZ_d4FR4VVpayuKTml3/view?usp=sharing'
+    },
+    {
+      es: 'https://drive.google.com/file/d/1VizBix85vFuzd29dB5EyvKEP25QHvjbg/view?usp=sharing',
+      en: 'https://drive.google.com/file/d/1feu9osGgjmzWxlcLyxIRCSSBvAucOQ9h/view?usp=sharing'
+    }
+  ];
+
   $: text = copy[$languageStore];
-  
+
   $: presentationCards = [
     {
       ...text.services.presentations[0],
       image: workshopImage,
       contactHref: '/contact?reason=talleres',
-      presentationHref: "https://drive.google.com/file/d/1T1ZsfmctS5gUi-7HYe0DtBfGGciCsj0g/view?usp=sharing"
+      presentationHref: presentationLinks[0][$languageStore]
     },
     {
       ...text.services.presentations[1],
       image: performanceImage,
       contactHref: '/contact?reason=eventos',
-      presentationHref: "https://drive.google.com/file/d/1GWz7d7x6X80zHDbshQl1WJVXM4dW_k31/view?usp=sharing"
+      presentationHref: presentationLinks[1][$languageStore]
     },
     {
       ...text.services.presentations[2],
       image: activityImage,
       contactHref: '/contact?reason=actividades_colaborativas',
-      presentationHref: "https://drive.google.com/file/d/1Sd0pqqVF2p180yhipRQc2FhEhn8Q5Are/view?usp=sharing"
+      presentationHref: presentationLinks[2][$languageStore]
+    },
+    {
+      ...text.services.presentations[3],
+      image: virtualImage,
+      contactHref: '/contact?reason=cursos_virtuales',
+      presentationHref: presentationLinks[3][$languageStore]
     }
   ];
 </script>
