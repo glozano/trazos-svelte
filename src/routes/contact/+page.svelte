@@ -13,6 +13,7 @@
     'talleres',
     'eventos',
     'actividades_colaborativas',
+    'cursos_virtuales',
     'desarrollos_tecnologicos',
     'comunidad',
     'colaborar',
