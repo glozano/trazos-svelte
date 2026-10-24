@@ -6,10 +6,12 @@
     import { page } from '$app/stores';
     import Snackbar from '@smui/snackbar';
     import Textfield, {Input} from '@smui/textfield';
+    import { trackEvent } from '$lib/analytics';
     export let showDialog = false;
 
     let copySnackbar;
     function copyToClipboard(text){
+        trackEvent('copy_board_link');
         navigator.clipboard.writeText(text);
         copySnackbar.open();
     }

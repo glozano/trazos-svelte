@@ -6,6 +6,7 @@
   import SiteNav from '$lib/components/SiteNav.svelte';
   import { copy } from '$lib/i18n/copy';
   import { languageStore } from '$lib/stores/languageStore';
+  import { trackEvent } from '$lib/analytics';
 
   $: text = copy[$languageStore];
   const reasonKeys = [
@@ -153,6 +154,7 @@
 
       submitStatus = 'success';
       statusMessage = text.contact.status.success;
+      trackEvent('contact_submit', { reason: payload.reason });
       formValues = { reason: 'otros', name: '', email: '', subject: '', message: '', website: '' };
     } catch (error) {
       submitStatus = 'error';

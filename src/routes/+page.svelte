@@ -8,6 +8,7 @@
   import { copy } from '$lib/i18n/copy';
   import { languageStore } from '$lib/stores/languageStore';
   import { generateRoomId } from '$lib/utils/board';
+  import { trackEvent } from '$lib/analytics';
 
   const ACTIVE_BOARDS_POLL_INTERVAL = 8000;
 
@@ -26,20 +27,29 @@
   ];
 
   function goToBoard() {
+    trackEvent('start_board', { source: 'home_primary' });
     goto(`/board/${generateRoomId()}`);
   }
 
   function createPrivateBoard() {
+    trackEvent('start_board', { source: 'home', board_type: 'private' });
     goto(`/board/${generateRoomId()}?private=1`);
   }
 
   function joinBoard() {
     const normalizedRoom = roomInput.trim();
     if (!normalizedRoom) return;
+    trackEvent('join_board', { source: 'home_join_form' });
     goto(`/board/${normalizedRoom}`);
   }
 
+  function joinActiveBoard(roomId) {
+    trackEvent('join_board', { source: 'active_boards_list' });
+    goto(`/board/${roomId}`);
+  }
+
   function showBoards() {
+    trackEvent('view_active_boards');
     currentView = 'boards';
   }
 
@@ -179,7 +189,7 @@
               <ul>
                 {#each activeBoards as board}
                   <li>
-                    <button type="button" class="board-link" on:click={() => goto(`/board/${board.id}`)}>
+                    <button type="button" class="board-link" on:click={() => joinActiveBoard(board.id)}>
                       <span class="board-id">{board.id}</span>
                       <span class="board-qty">{board.connections} {text.boards.activeOnlineLabel}</span>
                     </button>

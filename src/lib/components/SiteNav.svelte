@@ -4,6 +4,7 @@
   import { createEventDispatcher } from 'svelte';
   import { COMMUNITY_URL } from '$lib/config/site';
   import { generateRoomId } from '$lib/utils/board';
+  import { trackEvent } from '$lib/analytics';
   import logo from '$lib/images/logo.png';
 
   export let current = '';
@@ -19,6 +20,7 @@
   }
 
   function goToNewBoard() {
+    trackEvent('start_board', { source: 'nav' });
     drawerOpen = false;
     goto(`/board/${generateRoomId()}`);
   }
@@ -43,7 +45,12 @@
     <a class:active={current === 'info'} href="/info">{labels.info}</a>
     <a class:active={current === 'socios'} href="/socios">{labels.socios}</a>
     <a class:active={current === 'services'} href="/services">{labels.services}</a>
-    <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer">
+    <a
+      href={COMMUNITY_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      on:click={() => trackEvent('open_community', { source: 'nav' })}
+    >
       {labels.community}
     </a>
   </nav>
@@ -98,7 +105,15 @@
     <a class:active={current === 'info'} href="/info" on:click={closeDrawer}>{labels.info}</a>
     <a class:active={current === 'socios'} href="/socios" on:click={closeDrawer}>{labels.socios}</a>
     <a class:active={current === 'services'} href="/services" on:click={closeDrawer}>{labels.services}</a>
-    <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer" on:click={closeDrawer}>
+    <a
+      href={COMMUNITY_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      on:click={() => {
+        trackEvent('open_community', { source: 'nav_drawer' });
+        closeDrawer();
+      }}
+    >
       {labels.community} <span class="external-indicator" aria-hidden="true">&#8599;</span>
     </a>
     <button class="draw-cta" type="button" on:click={goToNewBoard}>{labels.draw}</button>

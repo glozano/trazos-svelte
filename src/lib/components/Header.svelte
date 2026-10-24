@@ -12,6 +12,7 @@
     import ChatDialog from './dialogs/ChatDialog.svelte';
     import GifDialog from './dialogs/GifDialog.svelte';
     import { gifStore } from '$lib/stores/gifStore';
+    import { trackEvent } from '$lib/analytics';
         
     export let active = true;
     export let forceUsernamePrompt = false;
@@ -25,7 +26,8 @@
     let lastRenameModalTrigger = 0;
 
     let triggerGifModal = () => {
-        gifDialog = true; 
+        trackEvent('create_gif');
+        gifDialog = true;
         $gifStore.createGif?.();
     };
 
@@ -48,7 +50,7 @@
         <a class="logo-link" href="/"><img src={logo} alt="Trazos club" height="30"/></a>
       </Section>
       <Section align="end" toolbar>
-        <IconButton aria-label="Invite friend" on:click={()=>(shareDialog = true)}>
+        <IconButton aria-label="Invite friend" on:click={()=>{ trackEvent('open_share'); shareDialog = true; }}>
           <ShareIcon></ShareIcon>
         </IconButton>
         <IconButton aria-label="Create GIF" on:click={triggerGifModal}>
@@ -57,7 +59,8 @@
         <IconButton 
             aria-label="Open chat" 
             on:click={() => {
-                chatDialog = true; 
+                trackEvent('open_chat');
+                chatDialog = true;
                 chatMessages = 0;
                 }}>
             {#if chatMessages > 0}

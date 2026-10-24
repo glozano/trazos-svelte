@@ -8,6 +8,7 @@
   import virtualImage from '$lib/images/services/services-virtual.jpeg';
   import { copy } from '$lib/i18n/copy';
   import { languageStore } from '$lib/stores/languageStore';
+  import { trackEvent } from '$lib/analytics';
 
   // Presentation PDFs per language (Spanish / English versions on Google Drive).
   const presentationLinks = [
@@ -94,6 +95,7 @@
                   href={card.presentationHref}
                   target="_blank"
                   rel="noopener noreferrer"
+                  on:click={() => trackEvent('view_presentation', { service: card.title })}
                 >
                   {text.services.viewPresentationCta}
                   <span class="material-icons icon-external" aria-hidden="true">open_in_new</span>

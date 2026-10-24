@@ -3,6 +3,7 @@
   import SiteNav from '$lib/components/SiteNav.svelte';
   import { copy } from '$lib/i18n/copy';
   import { languageStore } from '$lib/stores/languageStore';
+  import { trackEvent } from '$lib/analytics';
 
   const contactEmail = 'info@trazos.club';
 
@@ -186,6 +187,7 @@
               href={plan.href}
               target="_blank"
               rel="noopener noreferrer"
+              on:click={() => trackEvent('donate_click', { donation_type: 'monthly', plan: plan.label })}
             >
               {ui.monthlyButton}
             </a>
@@ -213,6 +215,7 @@
               href={method.href}
               target="_blank"
               rel="noopener noreferrer"
+              on:click={() => trackEvent('donate_click', { donation_type: 'one_time', method: method.title })}
             >
               {method.cta}
             </a>

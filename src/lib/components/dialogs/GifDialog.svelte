@@ -8,6 +8,7 @@
     import {p,canvas} from '$lib/stores/boardStore';
     import { GIF_DEFAULTS } from '$lib/config/gif';
     import { captureCanvasFrames, encodeGif, getGifDimensions } from '$lib/utils/gif';
+    import { trackEvent } from '$lib/analytics';
 
     const states = {
         idle: 'idle',
@@ -68,6 +69,7 @@
     const uploadToGiphy = async () => {
         if (!currentGif || status === states.uploading) return;
 
+        trackEvent('share_gif_giphy');
         try {
             status = states.uploading;
             gifStatus = 'Subiendo GIF a GIPHY';
@@ -162,20 +164,20 @@
                             <span>Subir a GIPHY y compartir</span>
                         </div>
                         <div class="vertical-btn">
-                            <IconButton class="material-icons download" target="_blank" href={downloadUrl} download="trazos.gif">
+                            <IconButton class="material-icons download" target="_blank" href={downloadUrl} download="trazos.gif" on:click={() => trackEvent('download_gif', { uploaded: false })}>
                                 download
                             </IconButton>
                             <span>{downloadLabel}</span>
                         </div>
                     {:else}
                         <div class="vertical-btn">
-                            <IconButton class="material-icons link" on:click={()=>{copyLink()}}>
+                            <IconButton class="material-icons link" on:click={()=>{ trackEvent('copy_gif_link'); copyLink(); }}>
                                 link
                             </IconButton>
                             <span>Copiar link</span>
                         </div>
                         <div class="vertical-btn">
-                            <IconButton class="material-icons download" target="_blank" href={downloadUrl}>
+                            <IconButton class="material-icons download" target="_blank" href={downloadUrl} on:click={() => trackEvent('download_gif', { uploaded: true })}>
                                 download
                             </IconButton>
                             <span>{downloadLabel}</span>
